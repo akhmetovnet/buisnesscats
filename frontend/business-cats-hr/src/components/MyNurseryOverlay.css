@@ -1,0 +1,821 @@
+.nursery-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: #d5dce4;
+}
+
+.nursery {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: url('/assets/mynurserybackground.png') center/cover no-repeat;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.nursery-header {
+  position: absolute;
+  top: 14px;
+  left: 12px;
+  right: 14px;
+  z-index: 12;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+
+.nursery-header__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nursery-header__home {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #fffbe4;
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+  text-shadow: 0 2px 5px rgba(48, 44, 26, 0.4);
+}
+
+.nursery-coins {
+  height: 66px;
+  min-width: 248px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: #005c85;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+}
+
+.nursery-coins__avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #0e7aab;
+  color: #fdf6ee;
+  font-size: 28px;
+}
+
+.nursery-coins__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: #f4f6ef;
+}
+
+.nursery-coins__name {
+  font-size: 37px;
+  line-height: 1;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.nursery-coins__value {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 44px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.nursery-coins__value .coin {
+  width: 20px;
+  height: 20px;
+}
+
+.nursery-header__season {
+  min-width: 234px;
+  height: 64px;
+  border-radius: 999px;
+  background: rgba(247, 251, 245, 0.68);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  color: #1f6184;
+  font-weight: 900;
+}
+
+.nursery-header__season-number {
+  margin: 0;
+  font-size: 32px;
+}
+
+.nursery-header__timer {
+  margin: 2px 0 0;
+  font-size: 40px;
+  color: #d95f3f;
+}
+
+.nursery-header__right {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  align-items: center;
+}
+
+.nursery-header__icon {
+  width: 52px;
+  height: 52px;
+  border: 0;
+  border-radius: 10px;
+  background: #005c85;
+  color: #fdf6ee;
+  font-size: 30px;
+  cursor: pointer;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16);
+}
+
+.nursery-header__icon--exit {
+  background: #c2a282;
+}
+
+.nursery-header__end {
+  height: 54px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 18px;
+  background: #c90e0d;
+  color: #fff;
+  font-weight: 900;
+  font-size: 30px;
+  cursor: pointer;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16);
+}
+
+.nursery-stage {
+  position: absolute;
+  inset: 80px 0 0;
+}
+
+.nursery-stage__tree-left {
+  position: absolute;
+  left: -4px;
+  top: -96px;
+  width: min(30vw, 360px);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.nursery-stage__tree-right {
+  position: absolute;
+  right: 0;
+  top: -80px;
+  width: min(15vw, 180px);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.nursery__sidebar {
+  position: absolute;
+  left: 12px;
+  top: 212px;
+  z-index: 10;
+  width: 84px;
+  padding: 14px 8px;
+  border-radius: 44px;
+  background: rgba(255, 255, 255, 0.95);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 12px 24px rgba(72, 72, 60, 0.2);
+}
+
+.nursery__btn {
+  width: 68px;
+  height: 68px;
+  border: 0;
+  border-radius: 50%;
+  background: #4d9b1e;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: inset 0 2px 2px rgba(255, 255, 255, 0.3);
+}
+
+.nursery__btn.is-active {
+  background: #2f7712;
+}
+
+.nursery__btn-icon {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.nursery__scene {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+}
+
+.nursery-house-marker {
+  position: absolute;
+  left: 292px;
+  top: 260px;
+  width: 86px;
+  height: 86px;
+  border-radius: 50%;
+  border: 5px solid #7c381d;
+  background: #632611;
+  color: #b17736;
+  font-size: 58px;
+  line-height: 1;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.nursery__house {
+  position: absolute;
+  left: 50%;
+  top: 86px;
+  transform: translateX(-50%);
+  width: min(76vw, 1120px);
+}
+
+.nursery__house > img {
+  width: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+.insurance-badge {
+  position: absolute;
+  right: 120px;
+  top: 74px;
+  background: #3f9d22;
+  color: #fff;
+  border-radius: 9px;
+  font-size: 16px;
+  font-weight: 900;
+  padding: 4px 10px;
+}
+
+.own-nurseries__nursery-box.nursery-box {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 52%;
+  width: min(74vw, 1020px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 70px;
+}
+
+.nursery-box__family {
+  display: flex;
+  flex-direction: column;
+}
+
+.nursery-box__old-cats-window {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.nursery-box__old-cat-card {
+  min-height: 140px;
+  border-radius: 14px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.nursery-box__old-cat-card.is-empty {
+  border: 2px dashed rgba(168, 106, 59, 0.35);
+  background: rgba(245, 227, 205, 0.08);
+}
+
+.breed-btn.nursery-box__cats-action {
+  margin-top: 10px;
+  width: 100%;
+  height: 70px;
+  border: 0;
+  border-radius: 10px;
+  background: #b25f34;
+  color: rgba(247, 194, 143, 0.38);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-size: 44px;
+  font-weight: 900;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.breed-btn.nursery-box__cats-action svg {
+  width: 26px;
+  height: 26px;
+}
+
+.nursery-box__kittens {
+  display: none;
+}
+
+.nursery-box__old-cat-card .cat--nursery .cat__image {
+  width: 106px;
+  height: 106px;
+}
+
+.kitten-slots {
+  position: absolute;
+  left: 28%;
+  bottom: 140px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  max-width: 56vw;
+}
+
+.kitten-slot {
+  position: relative;
+  width: 92px;
+  height: 100px;
+  border-radius: 16px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.kitten-slot.is-empty {
+  display: none;
+}
+
+.kitten-slot .cat--nursery .cat__image {
+  width: 84px;
+  height: 84px;
+}
+
+.cat {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  filter: drop-shadow(0 9px 8px rgba(42, 33, 14, 0.25));
+}
+
+.cat__image {
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.cat__image img {
+  display: block;
+  object-fit: contain;
+  width: 100%;
+  height: 100%;
+}
+
+.cat--nursery .cat__image {
+  width: 92px;
+  height: 92px;
+}
+
+.cat--single .cat__image {
+  width: 114px;
+  height: 114px;
+}
+
+.cat__count {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  min-width: 34px;
+  height: 28px;
+  border-radius: 999px;
+  background: #005c85;
+  color: #fdf6ee;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+}
+
+.cat__description {
+  margin-top: 6px;
+  color: #2f2f2f;
+  font-size: 14px;
+  line-height: 1.1;
+  font-weight: 900;
+  text-transform: lowercase;
+  text-align: center;
+}
+
+.kitten-slot .hungry,
+.kitten-slot .sick {
+  position: absolute;
+  top: 8px;
+  width: 20px;
+}
+
+.kitten-slot .hungry {
+  right: 2px;
+}
+
+.kitten-slot .sick {
+  left: 2px;
+}
+
+.nursery-fence {
+  position: absolute;
+  left: 49%;
+  transform: translateX(-50%);
+  bottom: 72px;
+  width: min(46vw, 680px);
+  height: 90px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(244, 230, 221, 0.95) 0 30px,
+      rgba(202, 172, 153, 0.95) 30px 35px
+    );
+  border-radius: 10px;
+  opacity: 0.82;
+}
+
+.yard {
+  position: absolute;
+  left: 27%;
+  bottom: 24px;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  max-width: 56vw;
+}
+
+.yard-cat {
+  position: relative;
+  width: 100px;
+  height: 108px;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.yard-cat .cat--nursery .cat__image {
+  width: 88px;
+  height: 88px;
+}
+
+.yard-cat .hungry,
+.yard-cat .sick {
+  position: absolute;
+  top: 9px;
+  width: 22px;
+}
+
+.yard-cat .hungry {
+  right: 2px;
+}
+
+.yard-cat .sick {
+  left: 2px;
+}
+
+.nursery-relocate {
+  position: absolute;
+  left: 22px;
+  bottom: 20px;
+  z-index: 10;
+  border: 0;
+  border-radius: 16px;
+  background: #7e341f;
+  color: #e5a184;
+  font-weight: 900;
+  font-size: 30px;
+  line-height: 0.95;
+  padding: 14px 22px;
+  cursor: pointer;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.16);
+}
+
+.text_button {
+  border: 0;
+  border-radius: 8px;
+  min-height: 40px;
+  padding: 8px 14px;
+  font-weight: 900;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.text_button--color-blue {
+  background: #005c85;
+  color: #fdf6ee;
+}
+
+.text_button--color-transparent {
+  background: rgba(255, 255, 255, 0.24);
+  color: #fdf6ee;
+}
+
+.nursery__house-placeholder {
+  position: absolute;
+  left: 50%;
+  top: 160px;
+  transform: translateX(-50%);
+  background: rgba(253, 244, 225, 0.95);
+  color: #7f5f41;
+  border-radius: 14px;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  font-weight: 900;
+}
+
+.nursery__house-placeholder .nursery__btn {
+  width: auto;
+  height: 48px;
+  border-radius: 10px;
+  padding: 0 16px;
+}
+
+.nursery__requests {
+  position: absolute;
+  right: 20px;
+  top: 100px;
+  z-index: 10;
+  display: grid;
+  gap: 22px;
+}
+
+.nursery__requests-icon {
+  width: 90px;
+  height: 90px;
+  border: 0;
+  border-radius: 16px;
+  background: rgba(255, 246, 236, 0.96);
+  cursor: pointer;
+  font-size: 52px;
+  box-shadow: 0 12px 24px rgba(72, 72, 60, 0.2);
+}
+
+.nursery__requests-panel {
+  width: 92px;
+  border-radius: 16px;
+  background: rgba(255, 246, 236, 0.96);
+  box-shadow: 0 12px 24px rgba(72, 72, 60, 0.2);
+  padding: 12px 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.nursery__requests-item {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  background: #efe4d7;
+  color: #baa58d;
+  font-size: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nursery__requests-item--active {
+  color: #fff;
+  background: #2ea86a;
+}
+
+.inspect-icon {
+  width: 56px;
+  height: 56px;
+}
+
+@media (max-width: 1400px) {
+  .nursery-coins {
+    min-width: 200px;
+    height: 52px;
+  }
+
+  .nursery-coins__avatar {
+    width: 38px;
+    height: 38px;
+    font-size: 20px;
+  }
+
+  .nursery-coins__name {
+    font-size: 26px;
+  }
+
+  .nursery-coins__value {
+    font-size: 30px;
+  }
+
+  .nursery-header__season {
+    min-width: 160px;
+    height: 48px;
+  }
+
+  .nursery-header__season-number {
+    font-size: 22px;
+  }
+
+  .nursery-header__timer {
+    font-size: 27px;
+  }
+
+  .nursery-header__icon {
+    width: 40px;
+    height: 40px;
+    font-size: 24px;
+  }
+
+  .nursery-header__end {
+    height: 42px;
+    font-size: 24px;
+    padding: 0 12px;
+  }
+
+  .nursery__sidebar {
+    width: 62px;
+    top: 150px;
+    padding: 10px 5px;
+    gap: 8px;
+  }
+
+  .nursery__btn {
+    width: 52px;
+    height: 52px;
+  }
+
+  .nursery__btn-icon {
+    font-size: 25px;
+  }
+
+  .nursery-house-marker {
+    left: 190px;
+    top: 190px;
+    width: 62px;
+    height: 62px;
+    font-size: 40px;
+  }
+
+  .own-nurseries__nursery-box.nursery-box {
+    gap: 42px;
+    width: min(72vw, 860px);
+  }
+
+  .nursery-box__old-cat-card {
+    min-height: 104px;
+  }
+
+  .nursery-box__old-cat-card .cat--nursery .cat__image {
+    width: 76px;
+    height: 76px;
+  }
+
+  .breed-btn.nursery-box__cats-action {
+    height: 52px;
+    font-size: 30px;
+  }
+
+  .kitten-slot {
+    width: 66px;
+    height: 74px;
+  }
+
+  .kitten-slot .cat--nursery .cat__image {
+    width: 62px;
+    height: 62px;
+  }
+
+  .yard-cat {
+    width: 72px;
+    height: 78px;
+  }
+
+  .yard-cat .cat--nursery .cat__image {
+    width: 66px;
+    height: 66px;
+  }
+
+  .nursery__requests-icon,
+  .nursery__requests-panel {
+    width: 66px;
+  }
+
+  .nursery__requests-icon {
+    height: 66px;
+    font-size: 38px;
+  }
+
+  .nursery__requests-item {
+    width: 46px;
+    height: 46px;
+    font-size: 28px;
+  }
+
+  .nursery-relocate {
+    font-size: 20px;
+    padding: 9px 16px;
+  }
+}
+
+@media (max-width: 900px) {
+  .nursery-header {
+    left: 8px;
+    right: 8px;
+    top: 8px;
+    gap: 6px;
+  }
+
+  .nursery-stage__tree-right {
+    display: none;
+  }
+
+  .nursery__sidebar {
+    top: 136px;
+    left: 8px;
+  }
+
+  .nursery__house {
+    width: min(90vw, 840px);
+    top: 112px;
+  }
+
+  .nursery-house-marker {
+    left: 110px;
+    top: 218px;
+  }
+
+  .own-nurseries__nursery-box.nursery-box {
+    gap: 26px;
+    width: min(74vw, 680px);
+  }
+
+  .breed-btn.nursery-box__cats-action {
+    font-size: 18px;
+    height: 34px;
+    border-radius: 8px;
+  }
+
+  .nursery-box__old-cat-card {
+    min-height: 72px;
+  }
+
+  .nursery-box__old-cat-card .cat--nursery .cat__image {
+    width: 54px;
+    height: 54px;
+  }
+
+  .kitten-slots {
+    left: 24%;
+    bottom: 106px;
+    max-width: 72vw;
+  }
+
+  .yard {
+    left: 24%;
+    bottom: 14px;
+    max-width: 72vw;
+  }
+
+  .nursery-fence {
+    width: min(58vw, 460px);
+    height: 58px;
+    bottom: 56px;
+  }
+
+  .nursery__requests {
+    right: 8px;
+    top: 82px;
+  }
+
+  .nursery-relocate {
+    left: 10px;
+    bottom: 10px;
+  }
+}
