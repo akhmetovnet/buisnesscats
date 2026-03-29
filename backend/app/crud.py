@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from .models import User, CandidateProfile
@@ -51,9 +51,17 @@ def update_profile(db: Session, user_id: str, data: dict) -> CandidateProfile:
     return profile
 
 import random
-from .models import GameSession, Season, GameEvent, CompetencyResult
+from .models import GameSession, Season, GameEvent, CompetencyResult, GameProgress, CatteryCompetitor
+from .game_config import (
+    CONFIG_ROLE_PLAYER,
+    CONFIG_START_COINS,
+    CONFIG_START_HOUSES,
+    CONFIG_START_KITTENS,
+    CONFIG_START_PRODUCTION_MODE,
+)
+from .cattery_ai import ensure_competitors_for_session, advance_competitors_for_season
 
-START_COINS = 40
+START_COINS = CONFIG_START_COINS
 SEASONS_TOTAL = 13
 
 UTILITY_COST = {"cattery": 3, "petshop": 1}
@@ -81,6 +89,54 @@ CAT_SEXES = ["M", "F"]
 COUNTERPARTY_TYPES = {"shop", "cattery"}
 
 
+def _build_start_inventory_for_player(role: str, seed: str) -> dict:
+    counts = _empty_inventory_counts()
+    entities: list[dict] = []
+    if role != "cattery":
+        return {"counts": counts, "entities": entities}
+
+    if CONFIG_START_PRODUCTION_MODE == "STARTER_PACK":
+        rnd = random.Random(seed)
+        color = rnd.choice(CAT_TYPES)
+        entities.append(
+            {
+                "id": f"starter-{uuid.uuid4().hex[:8]}",
+                "color": color,
+                "sex": "M",
+                "age": 0,
+                "isKitten": True,
+                "hungry": False,
+                "fedThisSeason": True,
+            }
+        )
+        entities.append(
+            {
+                "id": f"starter-{uuid.uuid4().hex[:8]}",
+                "color": color,
+                "sex": "F",
+                "age": 0,
+                "isKitten": True,
+                "hungry": False,
+                "fedThisSeason": True,
+            }
+        )
+    elif CONFIG_START_KITTENS > 0:
+        rnd = random.Random(seed)
+        for idx in range(CONFIG_START_KITTENS):
+            entities.append(
+                {
+                    "id": f"start-{idx}-{uuid.uuid4().hex[:8]}",
+                    "color": rnd.choice(CAT_TYPES),
+                    "sex": rnd.choice(CAT_SEXES),
+                    "age": 0,
+                    "isKitten": True,
+                    "hungry": False,
+                    "fedThisSeason": True,
+                }
+            )
+    return {"counts": counts, "entities": entities}
+
+
 def _get_latest_season(db: Session, session_id: str, season_number: int) -> Season | None:
     return (
         db.query(Season)
@@ -90,8 +146,21 @@ def _get_latest_season(db: Session, session_id: str, season_number: int) -> Seas
     )
 
 def start_game_session(db: Session, user_id: str) -> GameSession:
-    role = random.choice(["cattery", "petshop"])
-    session = GameSession(user_id=user_id, assigned_role=role, status="active")
+    if CONFIG_ROLE_PLAYER == "random":
+        role = random.choice(["cattery", "petshop"])
+    else:
+        role = CONFIG_ROLE_PLAYER
+
+    start_inventory = _build_start_inventory_for_player(role=role, seed=f"{user_id}:{datetime.utcnow().isoformat()}")
+    now = datetime.utcnow()
+    session = GameSession(
+        user_id=user_id,
+        assigned_role=role,
+        status="active",
+        inventory_json=_serialize_inventory(start_inventory),
+        last_action_at=now,
+        inactive_timeout_at=now + timedelta(minutes=5),
+    )
     db.add(session)
     db.flush()
 
@@ -104,6 +173,7 @@ def start_game_session(db: Session, user_id: str) -> GameSession:
         bot_coins_end=START_COINS,
     )
     db.add(season1)
+    ensure_competitors_for_session(db, session)
     db.commit()
     db.refresh(session)
     return session
@@ -142,7 +212,19 @@ def finish_season(db: Session, session_id: str, season_number: int, finish_early
 
     season.meta_json = json.dumps(meta, ensure_ascii=False)
     
-    bot_end = _bot_step(season.bot_coins_end, season_number)
+    # AI-конкуренты питомников: берем лучший бот-результат по монетам в текущем сезоне.
+    advance_competitors_for_season(db, session_id=session_id, season_number=season_number)
+    top_bot = (
+        db.query(CatteryCompetitor)
+        .filter(
+            CatteryCompetitor.session_id == session_id,
+            CatteryCompetitor.is_bot.is_(True),
+            CatteryCompetitor.season_number >= season_number,
+        )
+        .order_by(CatteryCompetitor.coins.desc())
+        .first()
+    )
+    bot_end = int(top_bot.coins) if top_bot else _bot_step(season.bot_coins_end, season_number)
 
     season.coins_end = coins_end
     season.profit = coins_end - coins_start
@@ -163,6 +245,7 @@ def finish_season(db: Session, session_id: str, season_number: int, finish_early
                 bot_coins_end=bot_end,
             )
             db.add(next_season)
+        advance_competitors_for_season(db, session_id=session_id, season_number=next_num)
 
     db.commit()
     db.refresh(season)
@@ -394,6 +477,8 @@ def apply_economy_events(db: Session, session: GameSession, season_number: int, 
 
     meta = {
         "tradeProfit": 0,
+        "tradeSellTotal": 0,
+        "tradeBuyTotal": 0,
         "creditsTaken": 0,
         "creditsRepaid": 0,
         "interestPaid": 0,
@@ -415,6 +500,7 @@ def apply_economy_events(db: Session, session: GameSession, season_number: int, 
             cost = max(0, qty * price)
             coins = max(0, coins - cost)
             meta["tradeProfit"] -= cost
+            meta["tradeBuyTotal"] += cost
 
         elif ev.event_type == "trade_sell":
             qty = int(payload.get("qty", 0))
@@ -422,6 +508,7 @@ def apply_economy_events(db: Session, session: GameSession, season_number: int, 
             income = max(0, qty * price)
             coins = coins + income
             meta["tradeProfit"] += income
+            meta["tradeSellTotal"] += income
 
         elif ev.event_type == "credit_taken":
             # payload: { creditType, amount }
@@ -761,6 +848,44 @@ def _remove_entities(entities: list[dict], color: str, sex: str | None, qty: int
     return next_entities
 
 
+def _remove_entity_by_id(entities: list[dict], entity_id: str | None, color: str, sex: str | None) -> tuple[list[dict], bool]:
+    if not entities or not entity_id:
+        return entities, False
+    normalized_sex = _normalize_sex(sex)
+    removed = False
+    next_entities = []
+    for entity in entities:
+        if removed:
+            next_entities.append(entity)
+            continue
+        same_id = str(entity.get("id")) == str(entity_id)
+        same_color = _normalize_color(entity.get("color")) == color
+        same_sex = _normalize_sex(entity.get("sex")) == normalized_sex if normalized_sex else True
+        if same_id and same_color and same_sex:
+            removed = True
+            continue
+        next_entities.append(entity)
+    return next_entities, removed
+
+
+def _append_entities(entities: list[dict], color: str, sex: str, qty: int, first_entity_id: str | None = None) -> list[dict]:
+    next_entities = list(entities or [])
+    for idx in range(max(0, qty)):
+        provided_id = first_entity_id if idx == 0 and first_entity_id else None
+        next_entities.append(
+            {
+                "id": provided_id or f"inv-{uuid.uuid4().hex[:12]}",
+                "color": color,
+                "sex": sex,
+                "age": 0,
+                "isKitten": True,
+                "hungry": False,
+                "fedThisSeason": True,
+            }
+        )
+    return next_entities
+
+
 def trade_market(
     db: Session,
     session: GameSession,
@@ -769,6 +894,7 @@ def trade_market(
     cat_type: str,
     qty: int,
     cat_sex: str | None = None,
+    entity_id: str | None = None,
     counterparty_type: str | None = None,
     counterparty_id: int | None = None,
 ) -> tuple[bool, str | None]:
@@ -786,6 +912,8 @@ def trade_market(
         return False, "invalid_counterparty_type"
     if sex is None:
         return False, "invalid_cat_sex"
+    if session.assigned_role == "cattery" and cp_type != "shop":
+        return False, "invalid_counterparty_for_role"
 
     season = _get_latest_season(db, session.id, season_number)
     if not season:
@@ -803,9 +931,17 @@ def trade_market(
     )
 
     if action == "sell":
-        if not _take_from_counts(counts, color, sex, qty):
-            return False, "not_enough_inventory"
-        entities = _remove_entities(entities, color, sex, qty)
+        if entity_id:
+            entities, removed = _remove_entity_by_id(entities, entity_id, color, sex)
+            if not removed:
+                return False, "not_enough_inventory"
+            counts = _empty_inventory_counts()
+            for entity in entities:
+                counts[entity["color"]][entity["sex"]] += 1
+        else:
+            if not _take_from_counts(counts, color, sex, qty):
+                return False, "not_enough_inventory"
+            entities = _remove_entities(entities, color, sex, qty)
         unit_price = _market_variant_price(market, color, sex, "sell")
     else:
         unit_price = _market_variant_price(market, color, sex, "buy")
@@ -816,12 +952,14 @@ def trade_market(
         if available < cost:
             return False, "not_enough_coins"
         counts[color][sex] += qty
+        entities = _append_entities(entities, color, sex, qty, first_entity_id=entity_id)
 
     session.inventory_json = _serialize_inventory({"counts": counts, "entities": entities})
     ev_payload = {
         "action": action,
         "catType": color,
         "catSex": sex,
+        "entityId": entity_id,
         "qty": qty,
         "unitPrice": unit_price,
         "counterpartyType": cp_type,
@@ -837,3 +975,46 @@ def trade_market(
     db.commit()
     db.refresh(session)
     return True, None
+
+
+def get_game_progress(db: Session, session_id: str, season_number: int) -> GameProgress | None:
+    return (
+        db.query(GameProgress)
+        .filter(
+            GameProgress.session_id == session_id,
+            GameProgress.season_number == season_number,
+        )
+        .order_by(GameProgress.updated_at.desc(), GameProgress.id.desc())
+        .first()
+    )
+
+
+def save_game_progress(
+    db: Session,
+    session_id: str,
+    season_number: int,
+    nursery: dict | None,
+    nursery_coins_delta: int,
+    time_left: int,
+) -> GameProgress:
+    progress = get_game_progress(db, session_id, season_number)
+    if not progress:
+        progress = GameProgress(
+            session_id=session_id,
+            season_number=season_number,
+        )
+        db.add(progress)
+
+    try:
+        nursery_json = json.dumps(nursery if isinstance(nursery, dict) else {}, ensure_ascii=False)
+    except Exception:
+        nursery_json = "{}"
+
+    progress.nursery_json = nursery_json
+    progress.nursery_coins_delta = _safe_int(nursery_coins_delta, 0)
+    progress.time_left = max(0, _safe_int(time_left, 0))
+    progress.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(progress)
+    return progress

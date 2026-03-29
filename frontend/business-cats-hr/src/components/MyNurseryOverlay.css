@@ -23,6 +23,12 @@
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
+  gap: 0;
+}
+
+.header_container {
+  background: none;
+  box-shadow: none;
 }
 
 .nursery-header__left {
@@ -32,7 +38,7 @@
 }
 
 .nursery-header__home {
-  width: 38px;
+  width: 48px;
   height: 38px;
   border: 0;
   padding: 0;
@@ -52,9 +58,9 @@
   align-items: center;
   gap: 10px;
   padding: 0 12px;
-  border-radius: 10px;
-  background: #005c85;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--color-primary-blue), var(--color-primary-blue-dark));
+  box-shadow: 0 8px 18px rgba(34, 60, 120, 0.2);
 }
 
 .nursery-coins__avatar {
@@ -64,6 +70,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  object-fit: cover;
   background: #0e7aab;
   color: #fdf6ee;
   font-size: 28px;
@@ -77,17 +85,18 @@
 }
 
 .nursery-coins__name {
-  font-size: 37px;
+  font-size: 20px;
   line-height: 1;
   font-weight: 900;
   text-transform: uppercase;
+  letter-spacing: 0;
 }
 
 .nursery-coins__value {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 44px;
+  font-size: 20px;
   line-height: 1;
   font-weight: 900;
 }
@@ -98,7 +107,7 @@
 }
 
 .nursery-header__season {
-  min-width: 234px;
+  min-width: 160px;
   height: 64px;
   border-radius: 999px;
   background: rgba(247, 251, 245, 0.68);
@@ -107,18 +116,18 @@
   align-items: center;
   justify-content: center;
   line-height: 1;
-  color: #1f6184;
+  color: var(--color-primary-blue-dark);
   font-weight: 900;
 }
 
 .nursery-header__season-number {
   margin: 0;
-  font-size: 32px;
+  font-size: 25px;
 }
 
 .nursery-header__timer {
   margin: 2px 0 0;
-  font-size: 40px;
+  font-size: 20px;
   color: #d95f3f;
 }
 
@@ -133,12 +142,12 @@
   width: 52px;
   height: 52px;
   border: 0;
-  border-radius: 10px;
-  background: #005c85;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-blue-dark);
   color: #fdf6ee;
   font-size: 30px;
   cursor: pointer;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 6px 14px rgba(34, 60, 120, 0.2);
 }
 
 .nursery-header__icon--exit {
@@ -146,21 +155,108 @@
 }
 
 .nursery-header__end {
-  height: 54px;
+  height: var(--btn-height-lg);
   border: 0;
-  border-radius: 10px;
+  border-radius: 14px;
   padding: 0 18px;
-  background: #c90e0d;
+  background: linear-gradient(135deg, #d64747, #ba2d2d);
   color: #fff;
   font-weight: 900;
-  font-size: 30px;
+  font-size: 24px;
+  letter-spacing: 0;
   cursor: pointer;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 6px 14px rgba(76, 24, 24, 0.25);
+  white-space: nowrap;
+}
+
+.season_container,
+.btns_container,
+.icon_button,
+.button_bg_blue,
+.button_bg_purple,
+.end-turn-button {
+  box-sizing: border-box;
 }
 
 .nursery-stage {
   position: absolute;
   inset: 80px 0 0;
+}
+
+.own-nurseries {
+  position: absolute;
+  inset: 0;
+}
+
+.own-nurseries__houses {
+  position: absolute;
+  inset: 0;
+}
+
+.own-nurseries__houses-slider {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.own-nurseries__cats {
+  width: 100%;
+}
+
+.own-nurseries__cats-slider {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.own-nurseries__tree {
+  pointer-events: none;
+}
+
+.own-nurseries__wood {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 168px;
+  width: min(48vw, 720px);
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(141, 79, 49, 0.35);
+  pointer-events: none;
+}
+
+.own-nurseries__actions {
+  z-index: 11;
+}
+
+.own-nurseries__actions-item {
+  background: #4d9b1e;
+}
+
+.own-nurseries__actions-item--eat {
+  background: #ccbba3;
+  color: #8e7b62;
+}
+
+.own-nurseries__actions-item--insurance {
+  background: #4d9b1e;
+}
+
+.own-nurseries__actions-item--magnifier {
+  background: #ccbba3;
+  color: #8e7b62;
+}
+
+.own-nurseries__actions-item.is-active {
+  background: #2f7712;
+  color: #fff;
+}
+
+.right-panel {
+  position: absolute;
+  right: 18px;
+  top: 82px;
+  z-index: 11;
 }
 
 .nursery-stage__tree-left {
@@ -188,7 +284,7 @@
   z-index: 10;
   width: 84px;
   padding: 14px 8px;
-  border-radius: 44px;
+  border-radius: 40px;
   background: rgba(255, 255, 255, 0.95);
   display: flex;
   flex-direction: column;
@@ -201,21 +297,30 @@
   height: 68px;
   border: 0;
   border-radius: 50%;
-  background: #4d9b1e;
+  background: linear-gradient(135deg, #44a85a, #2f8f51);
   color: #fff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   box-shadow: inset 0 2px 2px rgba(255, 255, 255, 0.3);
+  flex-direction: column;
+  gap: 1px;
 }
 
 .nursery__btn.is-active {
-  background: #2f7712;
+  background: #1f7540;
 }
 
 .nursery__btn-icon {
-  font-size: 34px;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.nursery__btn-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
   line-height: 1;
 }
 
@@ -260,45 +365,106 @@
 
 .insurance-badge {
   position: absolute;
-  right: 120px;
-  top: 74px;
-  background: #3f9d22;
-  color: #fff;
-  border-radius: 9px;
-  font-size: 16px;
+  left: 62%;
+  top: -60px;
+  transform: translateX(-50%);
+  width: min(28vw, 340px);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.insurance-badge img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.own-nurseries__houses-item.own-nurseries__houses-item--single-house {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  transform: translateX(-50%);
+  width: min(56vw, 1020px);
+}
+
+.own-nurseries__houses-tablet {
+  position: absolute;
+  left: -46px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.own-nurseries__houses-number_box {
+  width: 82px;
+  height: 82px;
+  border-radius: 50%;
+  border: 5px solid #7c381d;
+  background: #632611;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.26);
+}
+
+.own-nurseries__houses-number {
+  color: #b17736;
+  font-size: 54px;
+  line-height: 1;
   font-weight: 900;
-  padding: 4px 10px;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  pointer-events: none;
 }
 
 .own-nurseries__nursery-box.nursery-box {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  top: 52%;
-  width: min(74vw, 1020px);
+  position: relative;
+  width: 100%;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 70px;
 }
 
 .nursery-box__family {
+  --breed-x: 100px;
+  --breed-y: 100px;
+  --kittens-x: 200px;
+  --kittens-y: 500px;
   display: flex;
   flex-direction: column;
+}
+
+.nursery-box__family--left {
+  --breed-x: -10px;
+  --breed-y: -20px;
+  --kittens-x: 240px;
+  --kittens-y: -280px;
+}
+
+.nursery-box__family--right {
+  --breed-x: -10px;
+  --breed-y: -20px;
+   --kittens-x: 250px;
+  --kittens-y: -280px;
 }
 
 .nursery-box__old-cats-window {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 16px;
+  position: relative;
+  min-height: 10px;
 }
 
 .nursery-box__old-cat-card {
-  min-height: 140px;
+  min-height: 100px;
+  width: 100px;
+  justify-self: center;
   border-radius: 14px;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   cursor: pointer;
+  position: relative;
+  transform: translate(var(--slot-x), var(--slot-y));
 }
 
 .nursery-box__old-cat-card.is-empty {
@@ -306,23 +472,50 @@
   background: rgba(245, 227, 205, 0.08);
 }
 
+/* Настрой смещения здесь: -X влево, +X вправо, -Y вверх, +Y вниз */
+.parent-slot--left-0 {
+   --slot-x: -60px;
+  --slot-y: -60px;
+}
+
+.parent-slot--left-1 {
+   --slot-x: -150px;
+  --slot-y: -60px;
+}
+
+.parent-slot--right-0 {
+ --slot-x: -45px;
+  --slot-y: -60px;
+}
+
+.parent-slot--right-1 {
+  --slot-x: -135px;
+  --slot-y: -60px;
+}
+
 .breed-btn.nursery-box__cats-action {
   margin-top: 10px;
-  width: 100%;
-  height: 70px;
+  width: 60%;
+  height: 40px;
   border: 0;
   border-radius: 10px;
   background: #b25f34;
   color: rgba(247, 194, 143, 0.38);
   text-transform: uppercase;
   letter-spacing: 0.6px;
-  font-size: 44px;
+  font-size: 30px;
   font-weight: 900;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
+  transform: translate(var(--breed-x), var(--breed-y));
+}
+
+.breed-btn.nursery-box__cats-action.is-enabled {
+  color: #f8d4b0;
+  background: #b56a3c;
 }
 
 .breed-btn.nursery-box__cats-action svg {
@@ -331,7 +524,51 @@
 }
 
 .nursery-box__kittens {
-  display: none;
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 40%;
+  min-height: 40%;
+  transform: translate(var(--kittens-x), var(--kittens-y));
+}
+
+.nursery-box__kitten-card {
+  position: relative;
+  min-height: 80px;
+  border-radius: 10px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  cursor: pointer;
+  border: 1px solid rgba(133, 90, 58, 0.2);
+  background: rgba(196, 220, 235, 0.2);
+}
+
+.nursery-box__kitten-card.is-empty {
+  border: 2px dashed rgba(168, 106, 59, 0.38);
+  background: rgba(245, 227, 205, 0.18);
+}
+
+.nursery-box__kitten-card .cat--nursery .cat__image {
+  width: 58px;
+  height: 58px;
+}
+
+.nursery-box__kitten-card .hungry,
+.nursery-box__kitten-card .sick {
+  position: absolute;
+  top: 4px;
+  width: 14px;
+}
+
+.nursery-box__kitten-card .hungry {
+  right: 2px;
+}
+
+.nursery-box__kitten-card .sick {
+  left: 2px;
 }
 
 .nursery-box__old-cat-card .cat--nursery .cat__image {
@@ -443,31 +680,16 @@
   left: 2px;
 }
 
-.nursery-fence {
-  position: absolute;
-  left: 49%;
-  transform: translateX(-50%);
-  bottom: 72px;
-  width: min(46vw, 680px);
-  height: 90px;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      rgba(244, 230, 221, 0.95) 0 30px,
-      rgba(202, 172, 153, 0.95) 30px 35px
-    );
-  border-radius: 10px;
-  opacity: 0.82;
-}
-
 .yard {
   position: absolute;
   left: 27%;
+  transform: none;
   bottom: 24px;
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
   max-width: 56vw;
+  justify-content: flex-start;
 }
 
 .yard-cat {
@@ -516,28 +738,35 @@
   font-size: 30px;
   line-height: 0.95;
   padding: 14px 22px;
-  cursor: pointer;
+  cursor: default;
+  pointer-events: none;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.16);
 }
 
+.own-nurseries__bush {
+  text-transform: uppercase;
+}
+
 .text_button {
-  border: 0;
-  border-radius: 8px;
-  min-height: 40px;
-  padding: 8px 14px;
-  font-weight: 900;
-  font-size: 20px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  min-height: 48px;
+  padding: 0 20px;
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 22px;
   cursor: pointer;
 }
 
 .text_button--color-blue {
-  background: #005c85;
-  color: #fdf6ee;
+  background: linear-gradient(135deg, var(--color-primary-blue), var(--color-primary-blue-dark));
+  color: #fff;
 }
 
 .text_button--color-transparent {
-  background: rgba(255, 255, 255, 0.24);
-  color: #fdf6ee;
+  background: #edf3ff;
+  border-color: #d7e4fb;
+  color: var(--color-text-primary);
 }
 
 .nursery__house-placeholder {
@@ -623,15 +852,15 @@
   .nursery-coins__avatar {
     width: 38px;
     height: 38px;
-    font-size: 20px;
+    font-size: 10px;
   }
 
   .nursery-coins__name {
-    font-size: 26px;
+    font-size: 10px;
   }
 
   .nursery-coins__value {
-    font-size: 30px;
+    font-size: 10px;
   }
 
   .nursery-header__season {
@@ -640,7 +869,7 @@
   }
 
   .nursery-header__season-number {
-    font-size: 22px;
+    font-size: 12px;
   }
 
   .nursery-header__timer {
@@ -801,12 +1030,6 @@
     left: 24%;
     bottom: 14px;
     max-width: 72vw;
-  }
-
-  .nursery-fence {
-    width: min(58vw, 460px);
-    height: 58px;
-    bottom: 56px;
   }
 
   .nursery__requests {

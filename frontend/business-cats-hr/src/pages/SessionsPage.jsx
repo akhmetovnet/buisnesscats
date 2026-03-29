@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, apiPost } from '../api.js'
+import { api } from '../api.js'
 
 const fmt = (value) => {
   if (!value) return '—'
@@ -14,7 +14,6 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [creating, setCreating] = useState(false)
-  const [loginBusy, setLoginBusy] = useState(false)
   const navigate = useNavigate()
 
   const loadSessions = async () => {
@@ -33,26 +32,6 @@ export default function SessionsPage() {
   useEffect(() => {
     loadSessions()
   }, [])
-
-  const doLogin = async () => {
-    try {
-      setLoginBusy(true)
-      const res = await apiPost('/api/demo/login', {
-        role: 'candidate',
-        fullName: 'Timur',
-      })
-      if (res?.userId) {
-        localStorage.setItem('demoUserId', res.userId)
-        await loadSessions()
-      } else {
-        setError('Demo login failed: no userId')
-      }
-    } catch (err) {
-      setError(err.message || 'Demo login failed')
-    } finally {
-      setLoginBusy(false)
-    }
-  }
 
   const handleNewSession = async () => {
     try {
@@ -75,9 +54,6 @@ export default function SessionsPage() {
       <div className="page-header">
         <h1>Sessions</h1>
         <div className="actions">
-          <button className="btn btn-secondary" onClick={doLogin} disabled={loginBusy}>
-            {loginBusy ? 'Logging in...' : 'Demo login'}
-          </button>
           <button className="btn" onClick={handleNewSession} disabled={creating}>
             {creating ? 'Creating...' : 'New session'}
           </button>
