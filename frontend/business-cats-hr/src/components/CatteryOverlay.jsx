@@ -2,12 +2,13 @@ import MarketOverlay from './MarketOverlay.jsx'
 
 export default function CatteryOverlay(props) {
   const id = props.buildingId ?? '-'
+  const name = props.buildingName || `Питомник #${id}`
   return (
     <MarketOverlay
       {...props}
-      titleName={`Cattery #${id}`}
+      titleName={name}
       titleType="ПИТОМНИК"
-      stripName={`Cattery #${id}`}
+      stripName={name}
       stripType="ПИТОМНИК"
       overlayType="cattery"
     />
