@@ -729,17 +729,19 @@ export default function MyNurseryOverlay({
                 startFeedQueue()
               }}
               type="button"
-              title="Корм"
+              title="Еда"
             >
-              <span className="nursery__btn-icon">🍗</span>
+              <span className="nursery__btn-icon" aria-hidden="true">🐟</span>
+              <span className="nursery__btn-label">Еда</span>
             </button>
             <button
               className={`nursery__btn own-nurseries__actions-item own-nurseries__actions-item--insurance`}
               onClick={handleInsurance}
               type="button"
-              title="Страхование"
+              title="Страховка"
             >
-              <span className="nursery__btn-icon">✚</span>
+              <span className="nursery__btn-icon" aria-hidden="true">🛡</span>
+              <span className="nursery__btn-label">Страховка</span>
             </button>
             <button
               className={`nursery__btn own-nurseries__actions-item own-nurseries__actions-item--magnifier ${activeTool === 'inspect' ? 'is-active' : ''}`}
@@ -747,7 +749,8 @@ export default function MyNurseryOverlay({
               type="button"
               title="Осмотр"
             >
-              <span className="nursery__btn-icon">⌕</span>
+              <span className="nursery__btn-icon" aria-hidden="true">🔎</span>
+              <span className="nursery__btn-label">Осмотр</span>
             </button>
           </div>
 
