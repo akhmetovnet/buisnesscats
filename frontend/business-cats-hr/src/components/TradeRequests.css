@@ -57,9 +57,9 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  font-size: 12px;
-  line-height: 1.35;
-  font-weight: 800;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
 }
 
@@ -80,8 +80,9 @@
   border-radius: 50%;
   background: linear-gradient(135deg, var(--color-primary-blue), var(--color-primary-blue-dark));
   color: #fff;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--font-size-hud);
+  line-height: var(--line-height-hud);
+  font-weight: var(--font-weight-bold);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -96,30 +97,34 @@
   border-radius: 50%;
   background: var(--color-danger-red);
   color: #fff;
-  font-size: 11px;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
+  font-weight: var(--font-weight-semibold);
 }
 
 .request-item__state {
-  font-size: 10px;
-  font-weight: 800;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
   text-align: center;
 }
 
 .request-item__summary {
-  font-size: 10px;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
   color: var(--color-text-primary);
   text-align: center;
-  line-height: 1.2;
 }
 
 .request-item__sum {
-  font-size: 11px;
-  font-weight: 800;
+  font-size: var(--font-size-price-compact);
+  line-height: var(--line-height-price-compact);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
   color: var(--color-primary-blue-dark);
 }
 
@@ -146,8 +151,9 @@
 
 .request-modal__title {
   margin: 0 0 8px;
-  font-size: 28px;
-  line-height: 36px;
+  font-size: var(--font-size-modal-title);
+  line-height: var(--line-height-modal-title);
+  font-weight: var(--font-weight-bold);
   text-align: center;
   color: var(--color-text-primary);
 }
@@ -155,7 +161,9 @@
 .request-modal__subtitle {
   margin: 0 0 14px;
   text-align: center;
-  font-size: 16px;
+  font-size: var(--font-size-modal-subtitle);
+  line-height: var(--line-height-modal-subtitle);
+  font-weight: var(--font-weight-regular);
   color: var(--color-text-secondary);
 }
 
@@ -173,7 +181,8 @@
   border: 1px solid #d9e5f8;
   border-radius: var(--radius-sm);
   padding: 10px 12px;
-  font-size: 14px;
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
 }
 
 .request-modal__line--editable {
@@ -183,14 +192,15 @@
 }
 
 .request-modal__line-text {
-  line-height: 1.35;
+  line-height: var(--line-height-body-sm);
 }
 
 .request-modal__price-editor {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
   color: var(--color-text-secondary);
 }
 
@@ -199,8 +209,9 @@
   border-radius: 12px;
   border: 1px solid #c6d8fb;
   padding: 0 12px;
-  font-size: 16px;
-  font-weight: 700;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
   background: #fff;
 }
@@ -222,11 +233,14 @@
 }
 
 .request-modal__notice strong {
-  font-size: 14px;
+  font-size: var(--font-size-card-title-compact);
+  line-height: var(--line-height-card-title-compact);
+  font-weight: var(--font-weight-semibold);
 }
 
 .request-modal__notice span {
-  font-size: 13px;
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
   color: var(--color-text-secondary);
 }
 
@@ -241,12 +255,15 @@
 }
 
 .request-modal__decision strong {
-  font-size: 15px;
+  font-size: var(--font-size-game-card-title);
+  line-height: var(--line-height-game-card-title);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
 
 .request-modal__decision span {
-  font-size: 13px;
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
   color: var(--color-text-secondary);
 }
 
@@ -265,8 +282,9 @@
 }
 
 .request-modal__decision-line-title {
-  font-size: 13px;
-  font-weight: 800;
+  font-size: var(--font-size-card-title-compact);
+  line-height: var(--line-height-card-title-compact);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
 
@@ -274,8 +292,9 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
+  font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
 }
 
@@ -284,8 +303,9 @@
 }
 
 .request-modal__decision-line-reason {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
+  font-weight: var(--font-weight-medium);
   color: #73531a;
 }
 
@@ -293,14 +313,17 @@
   margin-top: 10px;
   text-align: center;
   color: var(--color-danger-red);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
+  font-weight: var(--font-weight-medium);
 }
 
 .request-modal__sum {
   margin-top: 12px;
-  font-weight: 800;
-  font-size: 22px;
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-price);
+  line-height: var(--line-height-price);
+  font-variant-numeric: tabular-nums;
   text-align: center;
   color: var(--color-primary-blue-dark);
 }
@@ -318,11 +341,12 @@
   border-radius: 12px;
   min-height: 44px;
   padding: 0 14px;
-  font-size: 13px;
+  font-size: var(--font-size-button);
+  line-height: var(--line-height-button);
   cursor: pointer;
   color: #fff;
   background: linear-gradient(135deg, var(--color-primary-blue), var(--color-primary-blue-dark));
-  font-weight: 700;
+  font-weight: var(--font-weight-semibold);
 }
 
 .request-btn--danger {
@@ -341,7 +365,8 @@
 
 .trade-send-modal__hero {
   text-align: center;
-  font-size: 18px;
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-body-lg);
   margin-bottom: 10px;
 }
 
@@ -367,7 +392,7 @@
   }
 
   .request-modal__title {
-    font-size: 22px;
-    line-height: 30px;
+    font-size: var(--font-size-panel-title);
+    line-height: var(--line-height-panel-title);
   }
 }

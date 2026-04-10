@@ -29,9 +29,10 @@
 
 .platform-logo__mark {
   color: #fff;
-  font-family: 'Fraunces', serif;
-  font-size: 24px;
-  line-height: 1;
+  font-family: var(--font-family-primary);
+  font-size: var(--font-size-section-title);
+  line-height: var(--line-height-section-title);
+  font-weight: var(--font-weight-bold);
 }
 
 .platform-nav {
@@ -45,7 +46,9 @@
   padding: 10px 18px;
   border-radius: var(--radius-sm);
   color: rgba(255, 255, 255, 0.85);
-  font-weight: 600;
+  font-size: var(--font-size-button);
+  line-height: var(--line-height-button);
+  font-weight: var(--font-weight-semibold);
   text-decoration: none;
   border: 1px solid transparent;
 }
@@ -97,7 +100,9 @@
   align-items: center;
   justify-content: center;
   color: #233b83;
-  font-weight: 700;
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
+  font-weight: var(--font-weight-bold);
 }
 
 .platform-user-menu {
@@ -120,7 +125,9 @@
   border-radius: 8px;
   padding: 10px 12px;
   text-align: left;
-  font-weight: 600;
+  font-size: var(--font-size-button);
+  line-height: var(--line-height-button);
+  font-weight: var(--font-weight-semibold);
   color: #1e2a55;
   cursor: pointer;
 }

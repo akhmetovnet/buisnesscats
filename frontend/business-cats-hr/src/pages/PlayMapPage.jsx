@@ -47,7 +47,7 @@ const CATTERIES = [
 const YOUR_CATTTERY_ID = 1
 const VALID_SEX = new Set(['M', 'F'])
 const TRACKED_INVENTORY_COLORS = ['white', 'black', 'gray', 'ginger']
-const DEFAULT_ADULT_AGE = 5
+const DEFAULT_ADULT_AGE = 3
 const COLOR_ALIAS = {
   orange: 'ginger',
 }
@@ -147,10 +147,20 @@ const normalizeSex = (value) => {
 }
 
 const resolveKittenStatus = (cat, adultAge = DEFAULT_ADULT_AGE) => {
-  if (typeof cat?.isKitten === 'boolean') return cat.isKitten
   const age = Number(cat?.age ?? cat?.ageSeasons)
   if (Number.isFinite(age)) return age < adultAge
-  return false
+  if (typeof cat?.lifeStage === 'string') {
+    const stage = cat.lifeStage.trim().toLowerCase()
+    if (stage === 'kitten') return true
+    if (stage === 'adult') return false
+  }
+  if (typeof cat?.entityType === 'string') {
+    const entityType = cat.entityType.trim().toLowerCase()
+    if (entityType === 'kitten') return true
+    if (entityType === 'adult') return false
+  }
+  if (typeof cat?.isKitten === 'boolean') return cat.isKitten
+  return null
 }
 
 const getMapCatSprite = (cat, adultAge = DEFAULT_ADULT_AGE) => {
@@ -547,12 +557,13 @@ const normalizeNurseryCat = (cat, { forceKitten = null, adultAge = DEFAULT_ADULT
   const sex = normalizeSex(cat.sex) || 'M'
   const color = normalizeColor(cat.color || 'gray') || 'gray'
   const age = normalizeSeasonNumber(cat.age, 0)
+  const resolvedKittenStatus = resolveKittenStatus(cat, adultAge)
   const isKitten =
-    typeof forceKitten === 'boolean'
-      ? forceKitten
-      : typeof cat.isKitten === 'boolean'
-        ? cat.isKitten
-        : age < adultAge
+    resolvedKittenStatus == null
+      ? typeof forceKitten === 'boolean'
+        ? forceKitten
+        : false
+      : resolvedKittenStatus
 
   return {
     ...cat,
@@ -718,7 +729,7 @@ export default function PlayMapPage({ me }) {
   const redirectFinishedSession = useCallback(() => {
     purgeSessionProgress()
     setPlayAccessDenied(true)
-    navigate('/sessions/history', { replace: true })
+    navigate('/competencies', { replace: true })
   }, [navigate, purgeSessionProgress])
 
   const isCurrentSessionRequest = useCallback(
@@ -2019,8 +2030,8 @@ export default function PlayMapPage({ me }) {
       <LoseModal
         open={loseOpen}
         onConfirm={() => {
-          purgeSessionProgress()
-          navigate('/sessions/history', { replace: true })
+          setLoseOpen(false)
+          redirectFinishedSession()
         }}
       />
 
@@ -2033,19 +2044,38 @@ export default function PlayMapPage({ me }) {
 
       {pendingSeasonTransition && escapedHungryCats.length ? (
         <div className="modal-overlay" onClick={handleEscapedHungryConfirm}>
-          <div className="modal modal--size-big escaped-hungry-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal--size-big season-change-modal escaped-hungry-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
-              <div className="modal__title">ЖИВОТНЫЕ СБЕЖАЛИ</div>
-              <div className="modal__desc">животные, которые остались вне домика к концу сезона, сбежали</div>
+              <div className="modal__title season-change-modal__title">
+                <span className="season-change-modal__icon">🏠</span>
+                ЖИВОТНЫЕ СБЕЖАЛИ
+              </div>
+              <div className="modal__desc season-change-modal__desc">
+                К концу сезона в питомнике остались животные вне домика, поэтому они сбежали.
+              </div>
             </div>
             <div className="modal__body">
-              <ul className="escaped-hungry-modal__list">
-                {escapedHungryCats.map((cat, idx) => (
-                  <li className="escaped-hungry-modal__item" key={`${cat.id}-${idx}`}>
-                    {describeEscapedHungryCat(cat)}
-                  </li>
-                ))}
-              </ul>
+              <div className="escaped-hungry-modal__summary">
+                <div className="escaped-hungry-modal__card">
+                  <span className="escaped-hungry-modal__label">Сбежало</span>
+                  <strong>{escapedHungryCats.length}</strong>
+                </div>
+                <div className="escaped-hungry-modal__card">
+                  <span className="escaped-hungry-modal__label">Правило сезона</span>
+                  <strong>Вне домика оставаться нельзя</strong>
+                </div>
+              </div>
+              <div className="escaped-hungry-modal__panel">
+                <div className="escaped-hungry-modal__panel-title">Кто сбежал</div>
+                <ul className="escaped-hungry-modal__list">
+                  {escapedHungryCats.map((cat, idx) => (
+                    <li className="escaped-hungry-modal__item" key={`${cat.id}-${idx}`}>
+                      <span className="escaped-hungry-modal__item-marker">•</span>
+                      <span>{describeEscapedHungryCat(cat)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
               <div className="modal__body-actions season-change-modal__body-actions">
                 <button className="text_button text_button--color-blue" onClick={handleEscapedHungryConfirm}>ПОНЯТНО</button>
               </div>
@@ -2101,6 +2131,7 @@ export default function PlayMapPage({ me }) {
         open={welcomeOpen}
         onClose={handleWelcomeClose}
         playerName="Леопольд"
+        startCoins={Math.max(0, Number(state?.coinsNowEstimate ?? 1000) || 1000)}
       />
 
       <RequestsSidebar requests={visibleTradeRequests} onOpenRequest={handleOpenRequest} />

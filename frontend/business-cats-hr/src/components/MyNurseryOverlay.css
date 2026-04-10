@@ -11,7 +11,7 @@
   height: 100vh;
   overflow: hidden;
   background: url('/assets/mynurserybackground.png') center/cover no-repeat;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-family-primary);
 }
 
 .nursery-header {
@@ -85,9 +85,9 @@
 }
 
 .nursery-coins__name {
-  font-size: 20px;
-  line-height: 1;
-  font-weight: 900;
+  font-size: var(--font-size-panel-title);
+  line-height: var(--line-height-panel-title);
+  font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0;
 }
@@ -96,9 +96,10 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 20px;
-  line-height: 1;
-  font-weight: 900;
+  font-size: var(--font-size-price);
+  line-height: var(--line-height-price);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
 }
 
 .nursery-coins__value .coin {
@@ -117,17 +118,21 @@
   justify-content: center;
   line-height: 1;
   color: var(--color-primary-blue-dark);
-  font-weight: 900;
+  font-weight: var(--font-weight-semibold);
 }
 
 .nursery-header__season-number {
   margin: 0;
-  font-size: 25px;
+  font-size: var(--font-size-panel-title);
+  line-height: var(--line-height-panel-title);
 }
 
 .nursery-header__timer {
   margin: 2px 0 0;
-  font-size: 20px;
+  font-size: var(--font-size-price);
+  line-height: var(--line-height-price);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
   color: #d95f3f;
 }
 
@@ -161,8 +166,9 @@
   padding: 0 18px;
   background: linear-gradient(135deg, #d64747, #ba2d2d);
   color: #fff;
-  font-weight: 900;
-  font-size: 24px;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-button-lg);
+  line-height: var(--line-height-button-lg);
   letter-spacing: 0;
   cursor: pointer;
   box-shadow: 0 6px 14px rgba(76, 24, 24, 0.25);
@@ -318,10 +324,10 @@
 }
 
 .nursery__btn-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  line-height: 1;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-caption);
 }
 
 .nursery__scene {
@@ -646,9 +652,10 @@
   border-radius: 999px;
   background: #005c85;
   color: #fdf6ee;
-  font-size: 20px;
-  font-weight: 900;
-  line-height: 1;
+  font-size: var(--font-size-price);
+  line-height: var(--line-height-price);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -658,9 +665,9 @@
 .cat__description {
   margin-top: 6px;
   color: #2f2f2f;
-  font-size: 14px;
-  line-height: 1.1;
-  font-weight: 900;
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  font-weight: var(--font-weight-semibold);
   text-transform: lowercase;
   text-align: center;
 }
@@ -734,9 +741,9 @@
   border-radius: 16px;
   background: #7e341f;
   color: #e5a184;
-  font-weight: 900;
-  font-size: 30px;
-  line-height: 0.95;
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-panel-title);
+  line-height: var(--line-height-panel-title);
   padding: 14px 22px;
   cursor: default;
   pointer-events: none;
@@ -752,9 +759,9 @@
   border-radius: 14px;
   min-height: 48px;
   padding: 0 20px;
-  font-weight: 700;
-  font-size: 18px;
-  line-height: 22px;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-button-lg);
+  line-height: var(--line-height-button-lg);
   cursor: pointer;
 }
 
@@ -781,7 +788,9 @@
   display: grid;
   gap: 10px;
   justify-items: center;
-  font-weight: 900;
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
+  font-weight: var(--font-weight-semibold);
 }
 
 .nursery__house-placeholder .nursery__btn {
@@ -1041,4 +1050,18 @@
     left: 10px;
     bottom: 10px;
   }
+}
+
+.nursery-house-marker,
+.own-nurseries__houses-number,
+.breed-btn.nursery-box__cats-action,
+.nursery__requests-icon,
+.nursery__requests-item {
+  font-family: var(--font-family-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+.nursery-house-marker,
+.own-nurseries__houses-number {
+  font-variant-numeric: tabular-nums;
 }

@@ -62,7 +62,7 @@ const SEX_LABEL_RU = {
   F: 'девочка',
 }
 const MAX_TRADE_PRICE = 999
-const DEFAULT_ADULT_AGE = 5
+const DEFAULT_ADULT_AGE = 3
 
 const resolveColorLabel = (value) => {
   const normalized = normalizeColor(value)
@@ -145,8 +145,9 @@ const normalizeSex = (value) => {
   return VALID_SEX.has(normalized) ? normalized : null
 }
 
-const resolveKittenStatus = (cat, adultAge = DEFAULT_ADULT_AGE) => {
-  if (typeof cat?.isKitten === 'boolean') return cat.isKitten
+export const resolveKittenStatus = (cat, adultAge = DEFAULT_ADULT_AGE) => {
+  const ageValue = Number(cat?.age ?? cat?.ageSeasons)
+  if (Number.isFinite(ageValue)) return ageValue < adultAge
   if (typeof cat?.lifeStage === 'string') {
     const stage = cat.lifeStage.trim().toLowerCase()
     if (stage === 'kitten') return true
@@ -157,8 +158,7 @@ const resolveKittenStatus = (cat, adultAge = DEFAULT_ADULT_AGE) => {
     if (entityType === 'kitten') return true
     if (entityType === 'adult') return false
   }
-  const ageValue = Number(cat?.age ?? cat?.ageSeasons)
-  if (Number.isFinite(ageValue)) return ageValue < adultAge
+  if (typeof cat?.isKitten === 'boolean') return cat.isKitten
   return null
 }
 
@@ -428,15 +428,22 @@ export default function MarketOverlay({
     [normalizedEntities, adultAge]
   )
 
-  const hasEntityMetadata = normalizedEntities.length > 0
+  const hasEntityMetadata = normalizedEntities.some((entity) => entity?.id != null)
 
   const mineTiles = useMemo(() => {
-    const templateTiles = DEFAULT_TYPES.flatMap((color) =>
-      SEX_ORDER.map((sex) => ({
-        key: `slot:${color}:${sex}`,
+    if (!hasEntityMetadata) return []
+
+    const grouped = new Map()
+    kittenEntities.forEach((entity) => {
+      const color = normalizeColor(entity?.color ?? entity?.catType)
+      const sex = normalizeSex(entity?.sex) || 'M'
+      const key = `slot:${color}:${sex}`
+      const entityId = entity?.id == null ? null : String(entity.id)
+      const current = grouped.get(key) || {
+        key,
         entityId: null,
         entityIds: [],
-        age: null,
+        age: Number(entity?.age ?? entity?.ageSeasons ?? 0) || 0,
         color,
         sex,
         count: 0,
@@ -450,37 +457,16 @@ export default function MarketOverlay({
           ownPrices[color]?.sell ??
           getMarketSidePrice(market, color, sex, 'sell'),
         strict: true,
-      }))
-    )
-
-    if (!hasEntityMetadata) {
-      return templateTiles.map((tile) => {
-        const total = Number(inventory?.[tile.color] ?? 0)
-        const count = tile.sex === 'M' ? total : 0
-        return {
-          ...tile,
-          key: `legacy:${tile.color}:${tile.sex}`,
-          count,
-          readyCount: count,
-          strict: false,
-        }
-      })
-    }
-
-    const grouped = new Map(templateTiles.map((tile) => [tile.key, { ...tile }]))
-    kittenEntities.forEach((entity) => {
-      const color = normalizeColor(entity?.color ?? entity?.catType)
-      const sex = normalizeSex(entity?.sex) || 'M'
-      const key = `slot:${color}:${sex}`
-      if (!grouped.has(key)) {
-        return
       }
-      const current = grouped.get(key)
       current.count += 1
       if (!isEntityHungry(entity)) {
         current.readyCount += 1
-        if (entity?.id) current.entityIds.push(String(entity.id))
+        if (entityId) {
+          current.entityIds.push(entityId)
+          if (!current.entityId) current.entityId = entityId
+        }
       }
+      grouped.set(key, current)
     })
 
     return Array.from(grouped.values()).sort((a, b) => {
@@ -490,31 +476,29 @@ export default function MarketOverlay({
       if (sexDiff !== 0) return sexDiff
       return Number(a.age || 0) - Number(b.age || 0)
     })
-  }, [hasEntityMetadata, inventory, ownPrices, kittenEntities, market])
+  }, [hasEntityMetadata, ownPrices, kittenEntities, market])
+
+  const visibleMineTiles = useMemo(
+    () => mineTiles.filter((tile) => tile.count > 0),
+    [mineTiles]
+  )
 
   const availableSellByVariant = useMemo(() => {
-    const byVariant = {}
-    if (hasEntityMetadata) {
-      mineTiles.forEach((tile) => {
-        const variantKey = `${tile.color}:${tile.sex || 'M'}`
-        byVariant[variantKey] = (byVariant[variantKey] ?? 0) + tile.readyCount
-      })
-    }
-    return byVariant
-  }, [hasEntityMetadata, mineTiles])
-
-  const availableSellByColor = useMemo(() => {
-    if (hasEntityMetadata) {
-      return mineTiles.reduce((acc, tile) => {
-        acc[tile.color] = (acc[tile.color] ?? 0) + tile.readyCount
-        return acc
-      }, {})
-    }
-    return DEFAULT_TYPES.reduce((acc, color) => {
-      acc[color] = Number(inventory?.[color] ?? 0)
+    return visibleMineTiles.reduce((acc, tile) => {
+      const variantKey = `${tile.color}:${tile.sex || 'M'}`
+      acc[variantKey] = (acc[variantKey] ?? 0) + tile.readyCount
       return acc
     }, {})
-  }, [hasEntityMetadata, mineTiles, inventory])
+  }, [visibleMineTiles])
+
+  const availableSellByColor = useMemo(() => {
+    return DEFAULT_TYPES.reduce((acc, color) => {
+      acc[color] = visibleMineTiles
+        .filter((tile) => tile.color === color)
+        .reduce((sum, tile) => sum + tile.readyCount, 0)
+      return acc
+    }, {})
+  }, [visibleMineTiles])
 
   const pendingSellByGroup = useMemo(
     () =>
@@ -1120,7 +1104,7 @@ export default function MarketOverlay({
 
               <div className="lot-area__content">
                 <div className="lot-area__cats">
-                  {mineTiles.map((tile) => {
+                  {visibleMineTiles.map((tile) => {
                     const prices = { buy: tile.buy, sell: tile.sell }
                     const queuedForSell = pendingSellByGroup[tile.key] ?? 0
                     const disabled = !canSell || tile.readyCount <= 0 || queuedForSell >= tile.readyCount
@@ -1188,6 +1172,9 @@ export default function MarketOverlay({
                       />
                     )
                   })}
+                  {!visibleMineTiles.length ? (
+                    <div className="trade-empty-state">Сейчас у вас нет котят, которых можно продать магазину</div>
+                  ) : null}
                 </div>
               </div>
             </section>

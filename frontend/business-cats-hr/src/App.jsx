@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { api } from './api.js'
+import './App.css'
 import PlatformLayout from './components/PlatformLayout.jsx'
 import AnalyticsPage from './pages/AnalyticsPage.jsx'
 import CompetenciesPage from './pages/CompetenciesPage.jsx'

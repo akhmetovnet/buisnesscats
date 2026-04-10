@@ -73,7 +73,7 @@ export default function AnalyticsPage() {
                 {(data?.competencies || []).map((c, idx) => (
                   <tr key={idx}>
                     <td>
-                      <div style={{ fontWeight: 700 }}>{c.name}</div>
+                      <div className="type-card-title-compact">{c.name}</div>
                       <div className="muted">{c.explanation}</div>
                     </td>
                     <td>{c.score}</td>

@@ -12,10 +12,12 @@
 }
 
 .platform-card__title {
-  font-family: 'Fraunces', serif;
-  font-size: 24px;
-  line-height: 32px;
-  margin-bottom: 16px;
+  font-family: var(--font-family-primary);
+  font-size: var(--font-size-section-title);
+  line-height: var(--line-height-section-title);
+  font-weight: var(--font-weight-semibold);
+  margin: 0 0 16px;
+  letter-spacing: normal;
   color: var(--color-text-primary);
 }
 
@@ -26,6 +28,8 @@
   background: #fdecec;
   padding: 10px 12px;
   color: #a12222;
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
 }
 
 .platform-ok {
@@ -35,10 +39,14 @@
   background: #ebfff2;
   padding: 10px 12px;
   color: #0d6b3c;
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
 }
 
 .platform-muted {
   color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 
 .platform-primary-btn,
@@ -47,7 +55,9 @@
   border-radius: 14px;
   min-height: var(--btn-height);
   padding: 0 22px;
-  font-weight: 700;
+  font-size: var(--font-size-button);
+  line-height: var(--line-height-button);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
 }
 
@@ -99,15 +109,17 @@
 .hero-card__content h1 {
   margin: 0 0 6px;
   color: var(--color-text-primary);
-  font-family: 'Fraunces', serif;
-  font-size: 48px;
-  line-height: 56px;
+  font-family: var(--font-family-primary);
+  font-size: var(--font-size-h1);
+  line-height: var(--line-height-h1);
+  font-weight: var(--font-weight-bold);
 }
 
 .hero-card__content p {
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: 20px;
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-body-lg);
 }
 
 .hero-card__actions {
@@ -152,6 +164,9 @@
 .competency-card__head h3 {
   margin: 0;
   color: var(--color-text-primary);
+  font-size: var(--font-size-card-title);
+  line-height: var(--line-height-card-title);
+  font-weight: var(--font-weight-semibold);
 }
 
 .competency-card__meta {
@@ -161,15 +176,19 @@
 }
 
 .competency-card__value {
-  font-size: 40px;
-  font-weight: 700;
+  font-size: var(--font-size-metric);
+  line-height: var(--line-height-metric);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
   color: var(--color-text-primary);
 }
 
 .competency-card__delta {
   border-radius: 999px;
   padding: 6px 10px;
-  font-weight: 700;
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  font-weight: var(--font-weight-semibold);
 }
 
 .competency-card__delta.is-positive {
@@ -186,7 +205,8 @@
   margin-top: 2px;
   margin-bottom: 12px;
   color: var(--color-text-secondary);
-  font-size: 14px;
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
 }
 
 .competency-progress {
@@ -250,9 +270,11 @@
 
 .profile-form h2 {
   margin: 0 0 10px;
-  font-family: 'Fraunces', serif;
+  font-family: var(--font-family-primary);
   color: #1c2d5b;
-  font-size: 32px;
+  font-size: var(--font-size-h3);
+  line-height: var(--line-height-h3);
+  font-weight: var(--font-weight-semibold);
 }
 
 .platform-form-grid {
@@ -266,7 +288,9 @@
   display: grid;
   gap: 6px;
   color: #304171;
-  font-weight: 600;
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  font-weight: var(--font-weight-medium);
 }
 
 .platform-form-grid input,
@@ -276,6 +300,8 @@
   border-radius: 12px;
   padding: 10px 12px;
   font: inherit;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
   color: #1e2d56;
   background: #fafdff;
 }
@@ -318,7 +344,11 @@
 
 .history-table th {
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-caption);
+  text-transform: uppercase;
 }
 
 .platform-card--active-session {
@@ -368,11 +398,16 @@
 .faq-item h3 {
   margin: 0 0 6px;
   color: #203364;
+  font-size: var(--font-size-card-title);
+  line-height: var(--line-height-card-title);
+  font-weight: var(--font-weight-semibold);
 }
 
 .faq-item p {
   margin: 0;
   color: #4f628f;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 
 @media (max-width: 980px) {
@@ -382,11 +417,13 @@
   }
 
   .hero-card__content h1 {
-    font-size: 32px;
+    font-size: var(--font-size-h2);
+    line-height: var(--line-height-h2);
   }
 
   .hero-card__content p {
-    font-size: 17px;
+    font-size: var(--font-size-body);
+    line-height: var(--line-height-body);
   }
 
   .competencies-grid {
@@ -400,4 +437,10 @@
   .platform-form-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.history-table td,
+.history-delta-row {
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
 }

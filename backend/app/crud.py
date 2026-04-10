@@ -684,9 +684,15 @@ def _normalize_entity(entity: dict) -> dict | None:
     if not color or not sex:
         return None
 
-    age = max(0, _safe_int(entity.get("age", entity.get("ageSeasons", 0)), 0))
+    age_raw = entity.get("age", entity.get("ageSeasons"))
+    age = max(0, _safe_int(age_raw, 0))
     explicit_kitten = entity.get("isKitten")
-    is_kitten = bool(explicit_kitten) if isinstance(explicit_kitten, bool) else age < ADULT_AGE
+    if age_raw is not None:
+        is_kitten = age < ADULT_AGE
+    elif isinstance(explicit_kitten, bool):
+        is_kitten = explicit_kitten
+    else:
+        is_kitten = age < ADULT_AGE
     return {
         "id": str(entity.get("id") or f"inv-{uuid.uuid4().hex[:12]}"),
         "color": color,

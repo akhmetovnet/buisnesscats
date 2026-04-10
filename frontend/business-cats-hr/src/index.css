@@ -1,7 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Space+Grotesk:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap&subset=cyrillic');
 
 :root {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color: #1f2a44;
@@ -10,7 +10,57 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  --font-display: 'Fraunces', serif;
+  --font-family-primary: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: var(--font-family-primary);
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-size-h1: 48px;
+  --line-height-h1: 56px;
+  --font-size-h2: 36px;
+  --line-height-h2: 44px;
+  --font-size-h3: 28px;
+  --line-height-h3: 36px;
+  --font-size-section-title: 24px;
+  --line-height-section-title: 32px;
+  --font-size-card-title: 20px;
+  --line-height-card-title: 28px;
+  --font-size-card-title-compact: 14px;
+  --line-height-card-title-compact: 18px;
+  --font-size-body-lg: 18px;
+  --line-height-body-lg: 26px;
+  --font-size-body: 16px;
+  --line-height-body: 24px;
+  --font-size-body-sm: 14px;
+  --line-height-body-sm: 20px;
+  --font-size-caption: 12px;
+  --line-height-caption: 16px;
+  --font-size-button-lg: 18px;
+  --line-height-button-lg: 22px;
+  --font-size-button: 16px;
+  --line-height-button: 20px;
+  --font-size-button-compact: 14px;
+  --line-height-button-compact: 18px;
+  --font-size-panel-title: 22px;
+  --line-height-panel-title: 28px;
+  --font-size-modal-title: 32px;
+  --line-height-modal-title: 38px;
+  --font-size-modal-subtitle: 18px;
+  --line-height-modal-subtitle: 24px;
+  --font-size-label: 14px;
+  --line-height-label: 18px;
+  --font-size-game-card-title: 16px;
+  --line-height-game-card-title: 22px;
+  --font-size-price: 20px;
+  --line-height-price: 24px;
+  --font-size-price-compact: 16px;
+  --line-height-price-compact: 20px;
+  --font-size-hud: 12px;
+  --line-height-hud: 16px;
+  --font-size-metric: 36px;
+  --line-height-metric: 44px;
+  --letter-spacing-caption: 0.04em;
   --color-primary-blue: #2558d2;
   --color-primary-blue-dark: #1f3f9f;
   --color-surface-white: #ffffff;
@@ -47,10 +97,39 @@ body {
   min-height: 100vh;
   background: var(--color-background-light);
   color: var(--text);
+  font-family: var(--font-family-primary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 
 #root {
   min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font-family: var(--font-family-primary);
+  color: var(--color-text-primary);
+}
+
+p,
+li,
+td,
+th,
+label,
+span,
+div {
+  font-family: inherit;
+}
+
+pre,
+code {
+  font-family: var(--font-family-primary);
 }
 
 a {
@@ -75,4 +154,144 @@ select:focus-visible,
 textarea:focus-visible {
   outline: 3px solid rgba(37, 88, 210, 0.25);
   outline-offset: 1px;
+}
+
+.type-h1 {
+  font-size: var(--font-size-h1);
+  line-height: var(--line-height-h1);
+  font-weight: var(--font-weight-bold);
+}
+
+.type-h2 {
+  font-size: var(--font-size-h2);
+  line-height: var(--line-height-h2);
+  font-weight: var(--font-weight-bold);
+}
+
+.type-h3 {
+  font-size: var(--font-size-h3);
+  line-height: var(--line-height-h3);
+  font-weight: var(--font-weight-semibold);
+}
+
+.type-section-title {
+  font-size: var(--font-size-section-title);
+  line-height: var(--line-height-section-title);
+  font-weight: var(--font-weight-semibold);
+}
+
+.type-card-title {
+  font-size: var(--font-size-card-title);
+  line-height: var(--line-height-card-title);
+  font-weight: var(--font-weight-semibold);
+}
+
+.type-card-title-compact {
+  font-size: var(--font-size-card-title-compact);
+  line-height: var(--line-height-card-title-compact);
+  font-weight: var(--font-weight-semibold);
+}
+
+.type-body-large {
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-body-lg);
+  font-weight: var(--font-weight-regular);
+}
+
+.type-body {
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  font-weight: var(--font-weight-regular);
+}
+
+.type-body-small {
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
+  font-weight: var(--font-weight-regular);
+}
+
+.type-caption {
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  font-weight: var(--font-weight-regular);
+  letter-spacing: var(--letter-spacing-caption);
+}
+
+.type-button {
+  font-size: var(--font-size-button);
+  line-height: var(--line-height-button);
+  font-weight: var(--font-weight-semibold);
+}
+
+.type-button-large {
+  font-size: var(--font-size-button-lg);
+  line-height: var(--line-height-button-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.type-button-compact {
+  font-size: var(--font-size-button-compact);
+  line-height: var(--line-height-button-compact);
+  font-weight: var(--font-weight-semibold);
+}
+
+.type-panel-title {
+  font-size: var(--font-size-panel-title);
+  line-height: var(--line-height-panel-title);
+  font-weight: var(--font-weight-semibold);
+}
+
+.type-modal-title {
+  font-size: var(--font-size-modal-title);
+  line-height: var(--line-height-modal-title);
+  font-weight: var(--font-weight-bold);
+}
+
+.type-modal-subtitle {
+  font-size: var(--font-size-modal-subtitle);
+  line-height: var(--line-height-modal-subtitle);
+  font-weight: var(--font-weight-regular);
+}
+
+.type-label {
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  font-weight: var(--font-weight-medium);
+}
+
+.type-game-card-title {
+  font-size: var(--font-size-game-card-title);
+  line-height: var(--line-height-game-card-title);
+  font-weight: var(--font-weight-semibold);
+}
+
+.type-price {
+  font-size: var(--font-size-price);
+  line-height: var(--line-height-price);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.type-price-compact {
+  font-size: var(--font-size-price-compact);
+  line-height: var(--line-height-price-compact);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.type-metric {
+  font-size: var(--font-size-metric);
+  line-height: var(--line-height-metric);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.type-hud {
+  font-size: var(--font-size-hud);
+  line-height: var(--line-height-hud);
+  font-weight: var(--font-weight-regular);
+}
+
+.type-secondary {
+  color: var(--color-text-secondary);
 }

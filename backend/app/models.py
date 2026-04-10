@@ -4,6 +4,7 @@ from sqlalchemy import String, DateTime, ForeignKey, Integer, Text, UniqueConstr
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
+from .game_config import CONFIG_START_COINS
 
 def _uuid() -> str:
     return str(uuid.uuid4())
@@ -84,8 +85,8 @@ class GameSession(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    result_coins_player: Mapped[int] = mapped_column(Integer, default=40)
-    result_coins_bot: Mapped[int] = mapped_column(Integer, default=40)
+    result_coins_player: Mapped[int] = mapped_column(Integer, default=CONFIG_START_COINS)
+    result_coins_bot: Mapped[int] = mapped_column(Integer, default=CONFIG_START_COINS)
 
     debt_total: Mapped[int] = mapped_column(Integer, default=0)         # текущий долг
     debt_rate: Mapped[float] = mapped_column(Float, default=0.0)        # средняя ставка (0.05 / 0.10 / 0.15)
@@ -103,10 +104,10 @@ class Season(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    coins_start: Mapped[int] = mapped_column(Integer, default=40)
-    coins_end: Mapped[int] = mapped_column(Integer, default=40)
+    coins_start: Mapped[int] = mapped_column(Integer, default=CONFIG_START_COINS)
+    coins_end: Mapped[int] = mapped_column(Integer, default=CONFIG_START_COINS)
     profit: Mapped[int] = mapped_column(Integer, default=0)
-    bot_coins_end: Mapped[int] = mapped_column(Integer, default=40)
+    bot_coins_end: Mapped[int] = mapped_column(Integer, default=CONFIG_START_COINS)
     
     from sqlalchemy import Text  # если нет
     meta_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
@@ -241,7 +242,7 @@ class CatteryCompetitor(Base):
     is_bot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     archetype: Mapped[str] = mapped_column(String(40), nullable=False, default="BALANCER")
 
-    coins: Mapped[int] = mapped_column(Integer, nullable=False, default=40)
+    coins: Mapped[int] = mapped_column(Integer, nullable=False, default=CONFIG_START_COINS)
     houses: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     reserve_coins_target: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
 

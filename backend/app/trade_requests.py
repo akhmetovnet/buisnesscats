@@ -258,11 +258,14 @@ def _derive_request_type(items: list[dict[str, Any]], is_counter: bool) -> str:
 def _entity_is_kitten(entity: dict[str, Any] | None) -> bool:
     if not isinstance(entity, dict):
         return False
+    age_raw = entity.get("age", entity.get("ageSeasons"))
+    age = _safe_int(age_raw, -1)
+    if age >= 0:
+        return age < ADULT_AGE
     explicit = entity.get("isKitten")
     if isinstance(explicit, bool):
         return explicit
-    age = _safe_int(entity.get("age", entity.get("ageSeasons", 0)), 0)
-    return age < ADULT_AGE
+    return False
 
 
 def _only_kittens_trade_meta() -> tuple[str, dict[str, Any]]:

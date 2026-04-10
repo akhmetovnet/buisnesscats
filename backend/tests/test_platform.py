@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from app import crud
 from app.db import Base, SessionLocal, engine, ensure_auth_columns, ensure_platform_columns
+from app.game_config import CONFIG_START_COINS
 from app.main import app
 from app.models import GameEvent, GameProgress, GameSession, Season, SessionCompetencyDelta, TradeBotState, TradeRequest
 
@@ -242,7 +243,7 @@ class PlatformFlowTests(unittest.TestCase):
                         'kittens': [],
                     },
                 },
-                'nurseryCoinsDelta': -40,
+                'nurseryCoinsDelta': -(CONFIG_START_COINS + 40),
             },
         )
         self.assertEqual(finish.status_code, 200)
@@ -280,10 +281,11 @@ class PlatformFlowTests(unittest.TestCase):
             self.assertEqual(int(season.coins_end or 0), 0)
             meta = json.loads(season.meta_json or '{}')
             self.assertGreater(int(meta.get('backendCoinsEnd', 0)), 0)
-            self.assertEqual(int(meta.get('nurseryCoinsDeltaApplied', 0)), -40)
+            expected_delta = -(CONFIG_START_COINS + 40)
+            self.assertEqual(int(meta.get('nurseryCoinsDeltaApplied', 0)), expected_delta)
             self.assertEqual(
                 int(meta.get('effectiveCoinsEnd', 0)),
-                max(0, int(meta.get('backendCoinsEnd', 0)) - 40),
+                max(0, int(meta.get('backendCoinsEnd', 0)) + expected_delta),
             )
 
             next_season = (
@@ -886,6 +888,75 @@ class PlatformFlowTests(unittest.TestCase):
                 'items': [
                     {
                         'catId': 'adult-black-1',
+                        'catType': 'black',
+                        'catColor': 'black',
+                        'catSex': 'M',
+                        'proposedPrice': 8,
+                        'unitPrice': 8,
+                        'quantity': 1,
+                        'currency': 'COIN',
+                        'side': 'SELL',
+                    }
+                ],
+            },
+        )
+        self.assertEqual(send.status_code, 200)
+        self.assertFalse(send.json()['ok'])
+        self.assertEqual(send.json()['error'], 'ONLY_KITTENS_CAN_BE_TRADED')
+
+        db = SessionLocal()
+        try:
+            count = db.query(TradeRequest).filter(TradeRequest.session_id == session_id).count()
+            self.assertEqual(count, 0)
+        finally:
+            db.close()
+
+    def test_adult_trade_request_is_rejected_even_with_stale_kitten_flag(self):
+        self._register_verify_login(email='adult-trade-stale-flag@example.com')
+
+        start = self.client.post('/api/sessions/start')
+        self.assertEqual(start.status_code, 200)
+        session_id = start.json()['sessionId']
+
+        db = SessionLocal()
+        try:
+            session = db.get(GameSession, session_id)
+            session.inventory_json = json.dumps(
+                {
+                    'counts': {
+                        'black': {'M': 1, 'F': 0},
+                        'white': {'M': 0, 'F': 0},
+                        'gray': {'M': 0, 'F': 0},
+                        'ginger': {'M': 0, 'F': 0},
+                    },
+                    'entities': [
+                        {
+                            'id': 'adult-black-stale-flag',
+                            'color': 'black',
+                            'sex': 'M',
+                            'age': 3,
+                            'isKitten': True,
+                            'hungry': False,
+                            'fedThisSeason': True,
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        send = self.client.post(
+            '/api/game/trade-requests/send',
+            json={
+                'sessionId': session_id,
+                'seasonNumber': 1,
+                'counterpartyType': 'shop',
+                'counterpartyId': 1,
+                'items': [
+                    {
+                        'catId': 'adult-black-stale-flag',
                         'catType': 'black',
                         'catColor': 'black',
                         'catSex': 'M',

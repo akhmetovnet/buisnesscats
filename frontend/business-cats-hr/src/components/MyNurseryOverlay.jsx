@@ -104,7 +104,7 @@ const COLOR_LABEL = {
   gray: 'серый',
   ginger: 'рыжий',
 }
-const DEFAULT_ADULT_AGE = 5
+const DEFAULT_ADULT_AGE = 3
 
 const resolveColorLabel = (value) => {
   const normalized = normalizeColor(value)
@@ -127,7 +127,8 @@ const normalizeSex = (value) => {
 const getCatSprite = (cat, adultAge = DEFAULT_ADULT_AGE) => {
   const color = normalizeColor(cat?.color)
   const sex = normalizeSex(cat?.sex) || 'M'
-  const isAdult = Number(cat?.age ?? 0) >= adultAge && !cat?.isKitten
+  const age = Number(cat?.age ?? cat?.ageSeasons)
+  const isAdult = Number.isFinite(age) ? age >= adultAge : !Boolean(cat?.isKitten)
   const lifeStage = isAdult ? 'adult' : 'kitten'
   const stageSprites = CAT_SPRITES[lifeStage] || CAT_SPRITES.kitten
   const sexSprites = stageSprites[sex] || stageSprites.M

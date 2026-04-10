@@ -1,137 +1,174 @@
-import './Overlay.css'
+import SteppedModal from './SteppedModal.jsx'
 
-const INTRO_TEXT =
-  'Ты играешь против ботов, у ботов ограниченное количество монет, иногда придется продавать котят по одному, а не всех сразу. Твоя задача - заработать больше монет, чем у ботов. Будь внимательнее, каждый сезон цены на котят обновляются. Количество сезонов в игре - 13.'
-
-const SEASON_SCHEDULE = [
-  { season: 1, label: '10 минут' },
-  { season: 2, label: '5 минут' },
-  { season: 3, label: '5 минут' },
-  { season: 4, label: '5 минут' },
-  { season: 5, label: '15 минут' },
-  { season: 6, label: '5 минут' },
-  { season: 7, label: '5 минут' },
-  { season: 8, label: '5 минут' },
-  { season: 9, label: '5 минут' },
-  { season: 10, label: '15 минут' },
-  { season: 11, label: '5 минут' },
-  { season: 12, label: '5 минут' },
-  { season: 13, label: '10 минут' },
+const SEASON_SCHEDULE_SUMMARY = [
+  { label: 'Сезон 1', value: '10 минут' },
+  { label: 'Сезоны 2-4, 6-9, 11-12', value: '5 минут' },
+  { label: 'Сезоны 5 и 10', value: '15 минут' },
+  { label: 'Сезон 13', value: '10 минут' },
 ]
 
-export default function WelcomeStartModal({ open, onClose, playerName = 'Леопольд' }) {
-  if (!open) return null
+const CREDIT_RULES = [
+  'Максимальная сумма кредитования - 35 монет',
+  'Потребительский кредит - 5%',
+  'Инвестиционный кредит - 10%',
+  'Кредит со спец. условиями - 15%',
+]
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal--size-big welcome-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal__header">
-          <div className="modal__title">Добро пожаловать</div>
-        </div>
-
-        <div className="modal__body">
-          <div className="modal__start">{INTRO_TEXT}</div>
-
-          <dl className="modal__description-list">
-            <div className="parameters-modal__wrapper">
-              <dt className="parameters-modal__title">Ваша роль</dt>
-              <dd className="parameters-modal__definition">
-                <span className="parameters-modal__role-title">
-                  Вы играете за роль питомник «{playerName}»
-                </span>
-              </dd>
+export default function WelcomeStartModal({
+  open,
+  onClose,
+  playerName = 'Леопольд',
+  startCoins = 1000,
+}) {
+  const steps = [
+    {
+      key: 'goal',
+      icon: '🎯',
+      title: 'Добро пожаловать',
+      subtitle: 'Здесь ты соревнуешься с ботами за лучший итоговый баланс.',
+      primaryLabel: 'Далее',
+      body: (
+        <div className="wizard-stack">
+          <div className="wizard-hero-card">
+            <div className="wizard-hero-card__icon">🐈</div>
+            <div className="wizard-hero-card__text">
+              Заработай больше монет, чем у ботов, и дойди до конца всех 13 сезонов.
             </div>
+          </div>
 
-            <div className="parameters-modal__wrapper">
-              <dt className="parameters-modal__title">Баланс</dt>
-              <dd className="parameters-modal__definition">
-                <div className="parameters-modal-information">
-                  <span className="parameters-modal-balance">
-                    Питомник - 40 <span className="coin-icon coin" />
-                  </span>
-                </div>
-                <div className="parameters-modal-information">
-                  <span className="parameters-modal-balance">
-                    Зоомагазин - 40 <span className="coin-icon coin" />
-                  </span>
-                </div>
-              </dd>
+          <div className="wizard-chip-grid">
+            <div className="wizard-chip-card">
+              <strong>13 сезонов</strong>
+              <span>Одна полная игровая сессия</span>
             </div>
-
-            <div className="parameters-modal__wrapper">
-              <dt className="parameters-modal__title">Коммунальные услуги</dt>
-              <dd className="parameters-modal__definition">
-                <div className="parameters-modal-information">
-                  <span className="parameters-modal-balance">
-                    Зоомагазин - 1 <span className="coin-icon coin" />
-                  </span>
-                </div>
-                <div className="parameters-modal-information">
-                  <span className="parameters-modal-balance">
-                    Питомник - 3 <span className="coin-icon coin" />
-                  </span>
-                </div>
-              </dd>
+            <div className="wizard-chip-card">
+              <strong>Рынок меняется</strong>
+              <span>Цены на котят обновляются каждый сезон</span>
             </div>
-
-            <div className="parameters-modal__wrapper">
-              <dt className="parameters-modal__title">Время сезона</dt>
-              <dd className="parameters-modal__definition">
-                <div className="parameters-modal-main-time-season">
-                  <div className="parameters-modal-season__column">
-                    <span className="parameters-modal-season"><b>Сезоны</b></span>
-                    {SEASON_SCHEDULE.map((item) => (
-                      <span key={`s-${item.season}`} className="parameters-modal-season notranslate">
-                        {item.season}
-                      </span>
-                    ))}
-                    <span className="parameters-modal-season"><b>Итого</b></span>
-                  </div>
-                  <span className="parameters-modal-line" />
-                  <div className="parameters-modal-season__column">
-                    <span className="parameters-modal-season"><b>Время сезонов</b></span>
-                    {SEASON_SCHEDULE.map((item) => (
-                      <span key={`t-${item.season}`} className="parameters-modal-season parameters-modal-season__time">
-                        <span>{item.label}</span>
-                      </span>
-                    ))}
-                    <span className="parameters-modal-season parameters-modal-season__time">
-                      <span><b>1 час 35 минут</b></span>
-                    </span>
-                  </div>
-                </div>
-              </dd>
+            <div className="wizard-chip-card">
+              <strong>Деньги ботов не бесконечны</strong>
+              <span>Иногда придётся продавать по одному котёнку</span>
             </div>
-
-            <div className="parameters-modal__wrapper">
-              <dt className="parameters-modal__title">Информация о кредитах</dt>
-              <dd className="parameters-modal__definition">
-                <div className="parameters-modal-information">
-                  <span>
-                    Максимальная сумма кредитования - 35 <span className="coin-icon coin" />
-                  </span>
-                </div>
-                <div className="parameters-modal-information parameters-modal-information-credit__type">
-                  <span>Потребительский кредит - 5%</span>
-                </div>
-                <div className="parameters-modal-information parameters-modal-information-credit__type">
-                  <span>Инвестиционный кредит - 10%</span>
-                </div>
-                <div className="parameters-modal-information parameters-modal-information-credit__type">
-                  <span>Кредит со спец. условиями - 15%</span>
-                </div>
-              </dd>
-            </div>
-          </dl>
-
-          <div className="modal__body-actions">
-            <button className="text_button text_button--color-blue" onClick={onClose}>
-              ПОНЯЛ
-            </button>
           </div>
         </div>
-      </div>
-    </div>
+      ),
+    },
+    {
+      key: 'role',
+      icon: '🐾',
+      title: 'Твоя роль и старт',
+      subtitle: `Ты играешь за питомник «${playerName}».`,
+      primaryLabel: 'Далее',
+      body: (
+        <div className="wizard-stack">
+          <div className="wizard-summary-grid wizard-summary-grid--two">
+            <div className="wizard-summary-card">
+              <span className="wizard-summary-card__label">Роль</span>
+              <strong>Питомник «{playerName}»</strong>
+            </div>
+            <div className="wizard-summary-card">
+              <span className="wizard-summary-card__label">Цель</span>
+              <strong>Финишировать выше ботов</strong>
+            </div>
+          </div>
+
+          <div className="wizard-balance-grid">
+            <div className="wizard-balance-card">
+              <span className="wizard-balance-card__label">Питомник</span>
+              <strong>{startCoins} <span className="coin-icon coin" /></strong>
+            </div>
+            <div className="wizard-balance-card">
+              <span className="wizard-balance-card__label">Зоомагазин</span>
+              <strong>{startCoins} <span className="coin-icon coin" /></strong>
+            </div>
+          </div>
+
+          <div className="wizard-note">
+            Следи за остатком денег у магазинов: даже выгодный оффер не сработает, если у бота закончилась наличность.
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'economy',
+      icon: '💸',
+      title: 'Экономика сезона',
+      subtitle: 'Коммуналка, кредиты и ограничения рынка влияют на твой темп.',
+      primaryLabel: 'Далее',
+      body: (
+        <div className="wizard-stack">
+          <div className="wizard-summary-grid wizard-summary-grid--two">
+            <div className="wizard-summary-card">
+              <span className="wizard-summary-card__label">Коммуналка питомника</span>
+              <strong>3 <span className="coin-icon coin" /></strong>
+            </div>
+            <div className="wizard-summary-card">
+              <span className="wizard-summary-card__label">Коммуналка магазина</span>
+              <strong>1 <span className="coin-icon coin" /></strong>
+            </div>
+          </div>
+
+          <div className="wizard-list-card">
+            <span className="wizard-list-card__title">Кредиты</span>
+            <ul className="wizard-list">
+              {CREDIT_RULES.map((rule) => (
+                <li key={rule}>{rule}</li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="wizard-note">
+            Рынок не всегда выкупает всех котят сразу. Планируй сделки и расходы по сезонам, а не только по текущему ходу.
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'timing',
+      icon: '⏱️',
+      title: 'Темп игры',
+      subtitle: 'CTA всегда рядом: дальше ты сразу переходишь в игру.',
+      primaryLabel: 'Начать игру',
+      body: (
+        <div className="wizard-stack">
+          <div className="wizard-summary-grid wizard-summary-grid--three">
+            <div className="wizard-summary-card">
+              <span className="wizard-summary-card__label">Всего сезонов</span>
+              <strong>13</strong>
+            </div>
+            <div className="wizard-summary-card">
+              <span className="wizard-summary-card__label">Полная сессия</span>
+              <strong>1 ч 35 мин</strong>
+            </div>
+            <div className="wizard-summary-card">
+              <span className="wizard-summary-card__label">Главный риск</span>
+              <strong>Не уйти в минус</strong>
+            </div>
+          </div>
+
+          <div className="wizard-list-card">
+            <span className="wizard-list-card__title">Длина сезонов</span>
+            <div className="wizard-timing-list">
+              {SEASON_SCHEDULE_SUMMARY.map((item) => (
+                <div key={item.label} className="wizard-timing-row">
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+  ]
+
+  return (
+    <SteppedModal
+      open={open}
+      steps={steps}
+      sizeClassName="modal--size-big"
+      className="welcome-modal stepped-modal--welcome"
+      onComplete={onClose}
+    />
   )
 }
-
