@@ -124,11 +124,6 @@ const resolveColorLabel = (value) => {
   return COLOR_LABEL[normalized] || 'неизвестный окрас'
 }
 
-const resolveColorLabel = (value) => {
-  const normalized = normalizeColor(value)
-  return COLOR_LABEL[normalized] || 'неизвестный окрас'
-}
-
 const normalizeColor = (value) => {
   const normalized = String(value ?? '')
     .trim()

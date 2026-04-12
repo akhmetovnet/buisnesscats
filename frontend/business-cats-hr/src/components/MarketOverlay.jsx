@@ -447,7 +447,7 @@ export default function MarketOverlay({
   const mineTiles = useMemo(() => {
     if (!hasEntityMetadata) return []
 
-    const grouped = new Map(templateTiles.map((tile) => [tile.key, { ...tile }]))
+    const grouped = new Map()
     kittenEntities.forEach((entity) => {
       const color = normalizeColor(entity?.color ?? entity?.catType)
       const sex = normalizeSex(entity?.sex) || 'M'
@@ -513,16 +513,6 @@ export default function MarketOverlay({
       return acc
     }, {})
   }, [visibleMineTiles])
-
-  const pendingSellByGroup = useMemo(
-    () =>
-      tradeItems.reduce((acc, item) => {
-        if (item.action !== 'sell' || !item.groupKey) return acc
-        acc[item.groupKey] = (acc[item.groupKey] ?? 0) + 1
-        return acc
-      }, {}),
-    [tradeItems]
-  )
 
   const pendingSellByGroup = useMemo(
     () =>
