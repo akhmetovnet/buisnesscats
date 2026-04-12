@@ -29,6 +29,21 @@ def make_bot_state(**overrides):
     return ShopBotState(**{**base.__dict__, **overrides})
 
 
+def make_display_100_state(**overrides):
+    expected_values = {"gray": 133, "black": 14, "white": 12, "ginger": 8}
+    current_demand = {"gray": 0, "black": 0, "white": 1, "ginger": -1}
+    inventory = {"gray": 1, "black": 2, "white": 1, "ginger": 0}
+    defaults = {
+        "cash": 240,
+        "relationScoreToPlayer": 4,
+        "inventoryByType": inventory,
+        "currentDemandByType": current_demand,
+        "expectedResaleValueByType": expected_values,
+    }
+    defaults.update(overrides)
+    return make_bot_state(**defaults)
+
+
 def sell_offer(price: int, *, cat_type: str = "gray") -> dict[str, str | int]:
     return {"catType": cat_type, "proposedPrice": price, "side": "SELL"}
 
@@ -46,57 +61,57 @@ class TradeBotTests(unittest.TestCase):
         self.assertGreater(display_price, 0)
         self.assertLessEqual(abs(display_price - fair_price), max(1, round(fair_price * 0.08)))
 
-    def test_scenario_1_accepts_good_deal_below_display_price(self):
-        state = make_bot_state()
-        self.assertEqual(bot_display_buy_price(state, "gray"), 12)
+    def test_scenario_1_accepts_offer_equal_to_display_price(self):
+        state = make_display_100_state()
+        self.assertEqual(bot_display_buy_price(state, "gray"), 100)
 
-        result = botEvaluateOffer(state, sell_offer(10), rng=random.Random(1))
-
-        self.assertEqual(result.decision, "ACCEPT")
-        self.assertEqual(result.reason, "GOOD_DEAL")
-        self.assertEqual(result.displayBuyPrice, 12)
-
-    def test_scenario_2_accepts_offer_equal_to_display_price(self):
-        state = make_bot_state()
-
-        result = botEvaluateOffer(state, sell_offer(12), rng=random.Random(2))
+        result = botEvaluateOffer(state, sell_offer(100), rng=random.Random(1))
 
         self.assertEqual(result.decision, "ACCEPT")
-        self.assertIn(result.reason, {"GOOD_DEAL", "FAIR_PRICE"})
-        self.assertEqual(result.displayBuyPrice, 12)
+        self.assertEqual(result.reason, "FAIR_PRICE")
+        self.assertEqual(result.displayBuyPrice, 100)
 
-    def test_scenario_3_accepts_or_soft_counters_slightly_above_display_price(self):
-        state = make_bot_state()
+    def test_scenario_2_accepts_or_soft_counters_in_zone_2(self):
+        state = make_display_100_state()
 
-        result = botEvaluateOffer(state, sell_offer(13), rng=random.Random(3))
+        result = botEvaluateOffer(state, sell_offer(110), rng=random.Random(2))
 
-        self.assertIn(result.decision, {"ACCEPT", "COUNTER"})
-        self.assertIn(result.reason, {"BORDERLINE", "FAIR_COUNTER"})
-        if result.decision == "COUNTER":
-            self.assertIsNotNone(result.counterPrice)
-            self.assertLessEqual(result.counterPrice, 13)
-            self.assertLessEqual(result.counterPrice, result.displayBuyPrice + 1)
+        self.assertEqual(result.decision, "ACCEPT")
+        self.assertEqual(result.reason, "ABOVE_MARKET_BUT_ACCEPTABLE")
+        self.assertEqual(result.displayBuyPrice, 100)
 
-    def test_scenario_4_hard_counter_stays_near_market_price(self):
-        state = make_bot_state()
+    def test_scenario_3_market_bot_counters_in_zone_3(self):
+        state = make_display_100_state()
 
-        result = botEvaluateOffer(state, sell_offer(14), rng=random.Random(4))
+        result = botEvaluateOffer(state, sell_offer(120), rng=random.Random(3))
 
         self.assertEqual(result.decision, "COUNTER")
         self.assertEqual(result.reason, "FAIR_COUNTER")
-        self.assertEqual(result.displayBuyPrice, 12)
-        self.assertIsNotNone(result.counterPrice)
-        self.assertGreaterEqual(result.counterPrice, 12)
-        self.assertLessEqual(result.counterPrice, 13)
+        self.assertGreaterEqual(result.counterPrice or 0, 100)
+        self.assertLessEqual(result.counterPrice or 0, 110)
 
-    def test_scenario_5_rejects_clearly_overpriced_offer(self):
-        result = botEvaluateOffer(make_bot_state(), sell_offer(16), rng=random.Random(5))
+    def test_scenario_3_aggressive_bot_may_accept_in_zone_3_with_high_demand(self):
+        state = make_display_100_state(
+            botId="shop:3",
+            archetype="AGGRESSIVE",
+            currentDemandByType={"gray": 2, "black": 0, "white": 1, "ginger": -1},
+            inventoryByType={"gray": 1, "black": 2, "white": 1, "ginger": 0},
+            expectedResaleValueByType={"gray": 111, "black": 14, "white": 12, "ginger": 8},
+        )
+
+        result = botEvaluateOffer(state, sell_offer(120), rng=random.Random(4))
+
+        self.assertEqual(result.decision, "ACCEPT")
+        self.assertEqual(result.reason, "ABOVE_MARKET_BUT_ACCEPTABLE")
+
+    def test_scenario_4_rejects_zone_4_offer(self):
+        result = botEvaluateOffer(make_display_100_state(), sell_offer(140), rng=random.Random(5))
 
         self.assertEqual(result.decision, "REJECT")
         self.assertEqual(result.reason, "PRICE_TOO_HIGH")
 
-    def test_scenario_6_accepts_fallback_very_cheap_offer(self):
-        state = make_bot_state(expectedResaleValueByType={"gray": 14, "black": 14, "white": 12, "ginger": 8})
+    def test_scenario_5_accepts_fallback_very_cheap_offer(self):
+        state = make_display_100_state(expectedResaleValueByType={"gray": 14, "black": 14, "white": 12, "ginger": 8})
 
         result = botEvaluateOffer(state, sell_offer(6), rng=random.Random(6))
 
@@ -104,67 +119,78 @@ class TradeBotTests(unittest.TestCase):
         self.assertEqual(result.reason, "GOOD_DEAL")
         self.assertEqual(result.expectedResaleValue, 14)
 
-    def test_scenario_7_rejects_when_bot_has_low_cash(self):
-        result = botEvaluateOffer(make_bot_state(cash=11), sell_offer(12), rng=random.Random(7))
+    def test_scenario_6_rejects_when_bot_has_low_cash(self):
+        result = botEvaluateOffer(make_display_100_state(cash=99), sell_offer(100), rng=random.Random(7))
 
         self.assertEqual(result.decision, "REJECT")
         self.assertEqual(result.reason, "LOW_CASH")
 
-    def test_scenario_8_overstocked_offer_counters_or_rejects(self):
-        state = make_bot_state(inventoryByType={"gray": 7, "black": 2, "white": 1, "ginger": 0})
+    def test_scenario_7_overstocked_offer_counters_or_rejects(self):
+        state = make_display_100_state(inventoryByType={"gray": 8, "black": 2, "white": 1, "ginger": 0})
 
-        result = botEvaluateOffer(state, sell_offer(13), rng=random.Random(8))
+        result = botEvaluateOffer(state, sell_offer(120), rng=random.Random(8))
 
         self.assertIn(result.decision, {"COUNTER", "REJECT"})
         self.assertEqual(result.reason, "OVERSTOCKED")
         if result.counterPrice is not None:
-            self.assertLessEqual(result.counterPrice, result.displayBuyPrice + 1)
+            self.assertLessEqual(result.counterPrice, 110)
 
-    def test_scenario_9_low_demand_offer_counters_or_rejects(self):
-        state = make_bot_state(currentDemandByType={"gray": -2, "black": 0, "white": 1, "ginger": -1})
+    def test_scenario_8_low_demand_offer_counters_or_rejects(self):
+        state = make_display_100_state(currentDemandByType={"gray": -2, "black": 0, "white": 1, "ginger": -1})
 
-        result = botEvaluateOffer(state, sell_offer(11), rng=random.Random(9))
+        result = botEvaluateOffer(state, sell_offer(120), rng=random.Random(9))
 
         self.assertIn(result.decision, {"COUNTER", "REJECT"})
         self.assertEqual(result.reason, "LOW_DEMAND")
 
-    def test_scenario_10_rejects_when_relation_is_zero(self):
-        result = botEvaluateOffer(make_bot_state(relationScoreToPlayer=0), sell_offer(6), rng=random.Random(10))
+    def test_scenario_9_rejects_when_relation_is_zero(self):
+        result = botEvaluateOffer(make_display_100_state(relationScoreToPlayer=0), sell_offer(6), rng=random.Random(10))
 
         self.assertEqual(result.decision, "REJECT")
         self.assertEqual(result.reason, "NO_RELATION")
 
-    def test_scenario_11_aggressive_bot_accepts_same_price_more_often(self):
+    def test_scenario_10_aggressive_bot_accepts_above_market_more_often(self):
         aggressive = botEvaluateOffer(
-            make_bot_state(botId="shop:3", archetype="AGGRESSIVE"),
-            sell_offer(12),
+            make_display_100_state(botId="shop:3", archetype="AGGRESSIVE"),
+            sell_offer(110),
             rng=random.Random(11),
         )
         cautious = botEvaluateOffer(
-            make_bot_state(botId="shop:1", archetype="CAUTIOUS"),
-            sell_offer(12),
+            make_display_100_state(botId="shop:1", archetype="CAUTIOUS"),
+            sell_offer(110),
             rng=random.Random(11),
         )
 
         self.assertEqual(aggressive.decision, "ACCEPT")
-        self.assertIn(cautious.decision, {"COUNTER", "REJECT"})
+        self.assertEqual(cautious.decision, "COUNTER")
 
-    def test_scenario_12_cautious_bot_with_weaker_relation_does_not_auto_accept(self):
+    def test_market_bot_accepts_near_market_offer_without_countering_by_default(self):
         result = botEvaluateOffer(
-            make_bot_state(botId="shop:1", archetype="CAUTIOUS", relationScoreToPlayer=2),
-            sell_offer(11),
+            make_display_100_state(botId="shop:2", archetype="MARKET"),
+            sell_offer(108),
+            rng=random.Random(18),
+        )
+
+        self.assertEqual(result.displayBuyPrice, 100)
+        self.assertEqual(result.decision, "ACCEPT")
+        self.assertIn(result.reason, {"FAIR_PRICE", "ABOVE_MARKET_BUT_ACCEPTABLE"})
+
+    def test_scenario_11_cautious_bot_with_weaker_relation_avoids_accepting_above_market(self):
+        result = botEvaluateOffer(
+            make_display_100_state(botId="shop:1", archetype="CAUTIOUS", relationScoreToPlayer=1),
+            sell_offer(110),
             rng=random.Random(12),
         )
 
         self.assertIn(result.decision, {"COUNTER", "REJECT"})
         self.assertNotEqual(result.decision, "ACCEPT")
 
-    def test_scenario_13_counter_never_jumps_far_above_display_price(self):
-        state = make_bot_state()
+    def test_scenario_12_counter_never_jumps_far_above_display_price(self):
+        state = make_display_100_state()
         display_price = bot_display_buy_price(state, "gray")
 
         counter = botBuildCounterOffer(
-            sell_offer(14),
+            sell_offer(120),
             fair_buy_price=bot_fair_buy_price(state, "gray"),
             display_buy_price=display_price,
             min_acceptable_price=int(bot_pricing_snapshot(state, "gray")["minAcceptablePrice"]),
@@ -174,12 +200,12 @@ class TradeBotTests(unittest.TestCase):
         )
 
         self.assertGreaterEqual(counter["proposedPrice"], display_price)
-        self.assertLessEqual(counter["proposedPrice"], display_price + 1)
-        self.assertLess(counter["proposedPrice"], 18)
+        self.assertLessEqual(counter["proposedPrice"], 110)
+        self.assertLess(counter["proposedPrice"], 160)
 
-    def test_scenario_14_price_at_or_below_display_is_not_rejected_without_hard_block(self):
-        state = make_bot_state(
-            cash=120,
+    def test_scenario_13_price_at_or_below_display_is_not_rejected_without_hard_block(self):
+        state = make_display_100_state(
+            cash=240,
             relationScoreToPlayer=1,
             inventoryByType={"gray": 8, "black": 2, "white": 1, "ginger": 0},
             currentDemandByType={"gray": -2, "black": 0, "white": 1, "ginger": -1},
@@ -191,7 +217,7 @@ class TradeBotTests(unittest.TestCase):
         self.assertNotEqual(result.decision, "REJECT")
 
     def test_ui_price_and_ai_decision_are_consistent(self):
-        state = make_bot_state()
+        state = make_display_100_state()
         display_price = bot_display_buy_price(state, "gray")
         decision = decide_on_offer([sell_offer(display_price)], state, request_id="req-1", rng=random.Random(15))
 
@@ -218,8 +244,8 @@ class TradeBotTests(unittest.TestCase):
 
     def test_request_level_counter_contains_counter_items(self):
         decision = decide_on_offer(
-            [sell_offer(14), sell_offer(9, cat_type="black")],
-            make_bot_state(),
+            [sell_offer(120), sell_offer(9, cat_type="black")],
+            make_display_100_state(),
             rng=random.Random(17),
         )
 
@@ -227,7 +253,8 @@ class TradeBotTests(unittest.TestCase):
         self.assertEqual(len(decision.counter_items or []), 2)
         self.assertIsNotNone(decision.decision_meta)
         first_line = decision.decision_meta["lines"][0]
-        self.assertLessEqual(first_line["shopPrice"], first_line["displayBuyPrice"] + 1)
+        self.assertLessEqual(first_line["shopPrice"], 110)
+        self.assertEqual(first_line["reason"], "FAIR_COUNTER")
 
     def test_update_relation_penalties_and_bonus(self):
         score = 5.0

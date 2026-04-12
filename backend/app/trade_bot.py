@@ -12,6 +12,8 @@ BOT_COUNTER_SELL_MARKUP_MIN = 1.03
 BOT_COUNTER_SELL_MARKUP_MAX = 1.10
 BOT_BASE_MARGIN_FACTOR = 0.75
 DISPLAY_PRICE_MAX_DEVIATION = 0.08
+BOT_ZONE2_MULTIPLIER = 1.15
+BOT_ZONE3_MULTIPLIER = 1.30
 
 BOT_ARCHETYPE_SETTINGS: dict[str, dict[str, float | int]] = {
     "CAUTIOUS": {
@@ -279,6 +281,55 @@ def _counter_reason(bot_state: ShopBotState, cat_type: str, relation_score: int)
     return "FAIR_COUNTER"
 
 
+def _sell_hard_block_reason(bot_state: ShopBotState, cat_type: str) -> str | None:
+    return None
+
+
+def _zone2_should_accept(
+    bot_state: ShopBotState,
+    cat_type: str,
+    *,
+    relation_score: int,
+) -> bool:
+    archetype = _coerce_archetype(bot_state.archetype or shop_bot_archetype(bot_state.botId))
+    demand = int(bot_state.currentDemandByType.get(cat_type, 0))
+    stock = max(0, int(bot_state.inventoryByType.get(cat_type, 0)))
+
+    if archetype == "AGGRESSIVE":
+        return relation_score >= 1 and demand >= -1 and stock <= 7
+    if archetype == "MARKET":
+        return relation_score >= 2 and demand >= -1 and stock <= 5
+    return relation_score >= 4 and demand >= 1 and stock <= 3
+
+
+def _zone3_should_accept(
+    bot_state: ShopBotState,
+    cat_type: str,
+    *,
+    relation_score: int,
+) -> bool:
+    archetype = _coerce_archetype(bot_state.archetype or shop_bot_archetype(bot_state.botId))
+    demand = int(bot_state.currentDemandByType.get(cat_type, 0))
+    stock = max(0, int(bot_state.inventoryByType.get(cat_type, 0)))
+    return archetype == "AGGRESSIVE" and relation_score >= 3 and demand >= 2 and stock <= 2
+
+
+def _should_reject_zone3(
+    bot_state: ShopBotState,
+    cat_type: str,
+    *,
+    relation_score: int,
+) -> bool:
+    archetype = _coerce_archetype(bot_state.archetype or shop_bot_archetype(bot_state.botId))
+    demand = int(bot_state.currentDemandByType.get(cat_type, 0))
+
+    if _hard_overstock_block(bot_state, cat_type) or demand <= -2:
+        return True
+    if archetype == "CAUTIOUS" and relation_score <= 1:
+        return True
+    return False
+
+
 def bot_counter_buy_price(
     bot_state: ShopBotState,
     cat_type: str,
@@ -289,24 +340,29 @@ def bot_counter_buy_price(
     min_acceptable_price: int,
     counter_mode: str = "SOFT",
 ) -> int:
-    settings = _archetype_settings(bot_state)
     normalized_mode = str(counter_mode or "SOFT").upper()
-    markup_key = "softCounterMarkup" if normalized_mode == "SOFT" else "hardCounterMarkup"
-    markup = float(settings[markup_key])
-    ceiling = min(
-        proposed_price - 1,
-        max(display_buy_price, round_to_nice_value(fair_buy_price * (1.0 + markup))),
-    )
-    ceiling = min(ceiling, display_buy_price + 1)
+    display_anchor = max(1, int(display_buy_price))
+    fair_anchor = max(1, int(fair_buy_price or display_anchor))
+    floor_price = max(1, max(int(min_acceptable_price or 1), min(display_anchor, fair_anchor)))
+
     if normalized_mode == "SOFT":
-        baseline = round_to_nice_value((fair_buy_price + display_buy_price) / 2.0)
+        ceiling = min(
+            proposed_price - 1,
+            max(floor_price, round_to_nice_value(display_anchor * 1.05)),
+        )
+        target = max(floor_price, min(display_anchor, ceiling))
     else:
-        baseline = display_buy_price
-    target = max(min_acceptable_price, min(ceiling, max(display_buy_price, baseline)))
+        ceiling = min(
+            proposed_price - 1,
+            max(floor_price, round_to_nice_value(display_anchor * 1.10)),
+        )
+        target = max(
+            floor_price,
+            min(round_to_nice_value(max(display_anchor, fair_anchor)), ceiling),
+        )
+
     if target >= proposed_price:
-        target = max(min_acceptable_price, proposed_price - 1)
-    if target > display_buy_price + 1:
-        target = display_buy_price + 1
+        target = max(floor_price, proposed_price - 1)
     return max(1, min(target, proposed_price - 1 if proposed_price > 1 else 1))
 
 
@@ -331,6 +387,8 @@ def botEvaluateOffer(
     relation_score = _relation_bucket(bot_state.relationScoreToPlayer)
     stock = max(0, int(bot_state.inventoryByType.get(cat_type, 0)))
     demand = int(bot_state.currentDemandByType.get(cat_type, 0))
+    zone2_limit = _price_limit(display_buy_price, BOT_ZONE2_MULTIPLIER)
+    zone3_limit = _price_limit(display_buy_price, BOT_ZONE3_MULTIPLIER)
 
     if relation_score == 0:
         return BotOfferEvaluationResult(
@@ -415,6 +473,17 @@ def botEvaluateOffer(
             reason="LOW_CASH",
         )
 
+    hard_block_reason = _sell_hard_block_reason(bot_state, cat_type)
+    if hard_block_reason:
+        return BotOfferEvaluationResult(
+            decision="REJECT",
+            displayBuyPrice=display_buy_price,
+            fairBuyPrice=fair_buy_price,
+            expectedResaleValue=expected_resale_value,
+            minAcceptablePrice=min_acceptable_price,
+            reason=hard_block_reason,
+        )
+
     fallback_accept_price = _price_limit(expected_resale_value, 0.5)
     if proposed_price <= fallback_accept_price:
         return BotOfferEvaluationResult(
@@ -424,16 +493,6 @@ def botEvaluateOffer(
             expectedResaleValue=expected_resale_value,
             minAcceptablePrice=min_acceptable_price,
             reason="GOOD_DEAL",
-        )
-
-    if _hard_overstock_block(bot_state, cat_type):
-        return BotOfferEvaluationResult(
-            decision="REJECT",
-            displayBuyPrice=display_buy_price,
-            fairBuyPrice=fair_buy_price,
-            expectedResaleValue=expected_resale_value,
-            minAcceptablePrice=min_acceptable_price,
-            reason="OVERSTOCKED",
         )
 
     if proposed_price <= display_buy_price:
@@ -456,17 +515,17 @@ def botEvaluateOffer(
             reason="FAIR_PRICE",
         )
 
-    if proposed_price <= _price_limit(fair_buy_price, 1.10):
-        reason = _counter_reason(bot_state, cat_type, relation_score)
-        if reason == "FAIR_COUNTER" and _soft_accept_score(bot_state, cat_type) >= 4.0:
+    if proposed_price <= zone2_limit:
+        if _zone2_should_accept(bot_state, cat_type, relation_score=relation_score):
             return BotOfferEvaluationResult(
                 decision="ACCEPT",
                 displayBuyPrice=display_buy_price,
                 fairBuyPrice=fair_buy_price,
                 expectedResaleValue=expected_resale_value,
                 minAcceptablePrice=min_acceptable_price,
-                reason="BORDERLINE",
+                reason="FAIR_PRICE" if proposed_price <= fair_buy_price else "ABOVE_MARKET_BUT_ACCEPTABLE",
             )
+        reason = _counter_reason(bot_state, cat_type, relation_score)
         return BotOfferEvaluationResult(
             decision="COUNTER",
             displayBuyPrice=display_buy_price,
@@ -482,12 +541,30 @@ def botEvaluateOffer(
                 min_acceptable_price=min_acceptable_price,
                 counter_mode="SOFT",
             ),
-            reason=reason if reason != "FAIR_COUNTER" else "FAIR_COUNTER",
+            reason=reason,
             counterMode="SOFT",
         )
 
-    if proposed_price <= _price_limit(fair_buy_price, 1.20):
+    if proposed_price <= zone3_limit:
         reason = _counter_reason(bot_state, cat_type, relation_score)
+        if _zone3_should_accept(bot_state, cat_type, relation_score=relation_score):
+            return BotOfferEvaluationResult(
+                decision="ACCEPT",
+                displayBuyPrice=display_buy_price,
+                fairBuyPrice=fair_buy_price,
+                expectedResaleValue=expected_resale_value,
+                minAcceptablePrice=min_acceptable_price,
+                reason="ABOVE_MARKET_BUT_ACCEPTABLE",
+            )
+        if _should_reject_zone3(bot_state, cat_type, relation_score=relation_score):
+            return BotOfferEvaluationResult(
+                decision="REJECT",
+                displayBuyPrice=display_buy_price,
+                fairBuyPrice=fair_buy_price,
+                expectedResaleValue=expected_resale_value,
+                minAcceptablePrice=min_acceptable_price,
+                reason=reason,
+            )
         return BotOfferEvaluationResult(
             decision="COUNTER",
             displayBuyPrice=display_buy_price,
@@ -503,7 +580,7 @@ def botEvaluateOffer(
                 min_acceptable_price=min_acceptable_price,
                 counter_mode="HARD",
             ),
-            reason=reason if reason != "FAIR_COUNTER" else "FAIR_COUNTER",
+            reason=reason,
             counterMode="HARD",
         )
 
@@ -516,7 +593,7 @@ def botEvaluateOffer(
             minAcceptablePrice=min_acceptable_price,
             reason="LOW_DEMAND",
         )
-    if stock >= 6:
+    if max(0, int(bot_state.inventoryByType.get(cat_type, 0))) >= 6:
         return BotOfferEvaluationResult(
             decision="REJECT",
             displayBuyPrice=display_buy_price,
@@ -608,7 +685,7 @@ def _message_code_for_reason(reason: str, action: str) -> str:
         "OVERSTOCKED": "BOT_OVERSTOCKED",
         "BAD_RELATION": "BOT_BAD_RELATION",
         "PRICE_TOO_HIGH": "BOT_TOO_EXPENSIVE",
-        "BORDERLINE": "BOT_BORDERLINE_REJECT",
+        "ABOVE_MARKET_BUT_ACCEPTABLE": "BOT_ACCEPTED",
         "GOOD_DEAL": "BOT_REJECTED",
         "FAIR_PRICE": "BOT_REJECTED",
         "FAIR_COUNTER": "BOT_COUNTERED",
@@ -626,23 +703,30 @@ def _decision_meta_from_evaluations(
     lines: list[dict[str, Any]] = []
     for item, evaluation in zip(request_items, decisions):
         proposed_price = max(0, int(item.get("proposedPrice") or item.get("unitPrice") or 0))
+        if action == "COUNTER":
+            shop_price = int(evaluation.counterPrice or evaluation.displayBuyPrice)
+        elif action == "ACCEPT":
+            shop_price = proposed_price
+        else:
+            shop_price = int(evaluation.displayBuyPrice)
         lines.append(
             {
                 "catType": str(item.get("catType") or item.get("catColor") or item.get("catTypeId") or "").strip().lower(),
                 "playerPrice": proposed_price,
-                "shopPrice": int(evaluation.counterPrice or evaluation.displayBuyPrice),
+                "shopPrice": shop_price,
                 "displayBuyPrice": int(evaluation.displayBuyPrice),
                 "fairBuyPrice": int(evaluation.fairBuyPrice),
                 "expectedResaleValue": int(evaluation.expectedResaleValue),
+                "counterBuyPrice": int(evaluation.counterPrice or 0),
                 "reason": evaluation.reason,
             }
         )
     if action == "COUNTER":
-        message = "Магазин предлагает цену, близкую к своей рыночной оценке."
+        message = "Магазин готов торговаться, но предлагает цену ближе к своей рыночной оценке."
     elif action == "REJECT":
-        message = "Магазин отказался от сделки по текущей цене."
+        message = "Магазин считает текущую цену слишком далекой от рыночной."
     else:
-        message = "Сделка одобрена по текущей цене."
+        message = "Магазин одобрил сделку по предложенной цене."
     return {
         "kind": f"BOT_{action}",
         "reason": decisions[0].reason if decisions else None,

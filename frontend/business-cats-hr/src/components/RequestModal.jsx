@@ -44,7 +44,7 @@ const SEX_LABEL = {
 const DECISION_REASON_LABEL = {
   GOOD_DEAL: 'Выгодная цена',
   FAIR_PRICE: 'Справедливая цена',
-  BORDERLINE: 'Пограничная цена',
+  ABOVE_MARKET_BUT_ACCEPTABLE: 'Цена выше базовой, но всё ещё приемлема',
   PRICE_TOO_HIGH: 'Цена слишком высокая',
   LOW_CASH: 'У магазина не хватает монет',
   LOW_DEMAND: 'Низкий спрос',
@@ -262,7 +262,7 @@ export default function RequestModal({
                 disabled={busy || invalidDraft}
                 onClick={() => onAction('counter', { counterItems: draftPayload })}
               >
-                ОТПРАВИТЬ ВСТРЕЧНУЮ
+                ПРЕДЛОЖИТЬ НОВУЮ ЦЕНУ
               </button>
               <button className="request-btn request-btn--secondary" type="button" disabled={busy} onClick={() => onAction('request_clarification')}>
                 НУЖНО УТОЧНЕНИЕ

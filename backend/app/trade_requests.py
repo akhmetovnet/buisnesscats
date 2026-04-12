@@ -268,9 +268,35 @@ def _entity_is_kitten(entity: dict[str, Any] | None) -> bool:
     return False
 
 
+def _entity_is_sick(entity: dict[str, Any] | None) -> bool:
+    if not isinstance(entity, dict):
+        return False
+    raw_status = str(entity.get("healthStatus") or "").strip().upper()
+    if raw_status == "HEALED":
+        return False
+    if raw_status == "SICK":
+        return True
+    if isinstance(entity.get("isSick"), bool):
+        return bool(entity.get("isSick"))
+    disease_type = str(entity.get("diseaseType") or "").strip().upper()
+    legacy_disease = str(entity.get("sick") or "").strip().lower()
+    return disease_type in {"RINGWORM", "FLEAS", "POISONING", "BROKEN_PAW"} or legacy_disease in {
+        "lichen",
+        "fleas",
+        "poisoning",
+        "brokenpaw",
+    }
+
+
 def _only_kittens_trade_meta() -> tuple[str, dict[str, Any]]:
     return "ONLY_KITTENS_CAN_BE_TRADED", {
         "message": "Продавать можно только котят",
+    }
+
+
+def _sick_kittens_trade_meta() -> tuple[str, dict[str, Any]]:
+    return "SICK_KITTENS_CANNOT_BE_TRADED", {
+        "message": "Больных котят нельзя продавать",
     }
 
 
@@ -811,6 +837,10 @@ def _append_entities(
                     "isKitten": True,
                     "hungry": False,
                     "fedThisSeason": True,
+                    "isSick": False,
+                    "diseaseType": None,
+                    "healthStatus": "HEALTHY",
+                    "healedAtSeason": None,
                 }
             )
     return next_entities
@@ -842,6 +872,9 @@ def _take_exact_item(
             if not _entity_is_kitten(entity):
                 reason, meta_json = _only_kittens_trade_meta()
                 return False, {"M": 0, "F": 0}, [], reason, meta_json
+            if _entity_is_sick(entity):
+                reason, meta_json = _sick_kittens_trade_meta()
+                return False, {"M": 0, "F": 0}, [], reason, meta_json
             entities.pop(index)
             inventory["entities"] = entities
             moved = _make_inventory_moved(entity_sex)
@@ -858,15 +891,24 @@ def _take_exact_item(
     if entities:
         matched_indexes: list[int] = []
         kitten_index: int | None = None
+        sick_kitten_found = False
         for index, entity in enumerate(entities):
             entity_color = _norm_color(entity.get("color"))
             entity_sex = _norm_sex(entity.get("sex"))
             if entity_color != color or (sex and entity_sex != sex):
                 continue
             matched_indexes.append(index)
-            if kitten_index is None and _entity_is_kitten(entity):
+            if not _entity_is_kitten(entity):
+                continue
+            if _entity_is_sick(entity):
+                sick_kitten_found = True
+                continue
+            if kitten_index is None:
                 kitten_index = index
         if matched_indexes and kitten_index is None:
+            if sick_kitten_found:
+                reason, meta_json = _sick_kittens_trade_meta()
+                return False, {"M": 0, "F": 0}, [], reason, meta_json
             reason, meta_json = _only_kittens_trade_meta()
             return False, {"M": 0, "F": 0}, [], reason, meta_json
         if kitten_index is not None:

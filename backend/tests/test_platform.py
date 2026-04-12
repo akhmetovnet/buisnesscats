@@ -753,6 +753,128 @@ class PlatformFlowTests(unittest.TestCase):
         finally:
             db.close()
 
+    def test_accepted_sell_request_removes_only_sold_kitten_and_keeps_remaining_kittens(self):
+        self._register_verify_login(email='bot-buy-group@example.com')
+
+        start = self.client.post('/api/sessions/start')
+        self.assertEqual(start.status_code, 200)
+        session_id = start.json()['sessionId']
+
+        db = SessionLocal()
+        try:
+            session = db.get(GameSession, session_id)
+            session.inventory_json = json.dumps(
+                {
+                    'counts': {
+                        'black': {'M': 4, 'F': 0},
+                        'white': {'M': 0, 'F': 0},
+                        'gray': {'M': 0, 'F': 0},
+                        'ginger': {'M': 0, 'F': 0},
+                    },
+                    'entities': [
+                        {
+                            'id': 'adult-black-m',
+                            'color': 'black',
+                            'sex': 'M',
+                            'age': 4,
+                            'isKitten': False,
+                            'hungry': False,
+                            'fedThisSeason': True,
+                        },
+                        {
+                            'id': 'kitten-black-m-1',
+                            'color': 'black',
+                            'sex': 'M',
+                            'age': 0,
+                            'isKitten': True,
+                            'hungry': False,
+                            'fedThisSeason': True,
+                        },
+                        {
+                            'id': 'kitten-black-m-2',
+                            'color': 'black',
+                            'sex': 'M',
+                            'age': 1,
+                            'isKitten': True,
+                            'hungry': False,
+                            'fedThisSeason': True,
+                        },
+                        {
+                            'id': 'kitten-black-m-3',
+                            'color': 'black',
+                            'sex': 'M',
+                            'age': 1,
+                            'isKitten': True,
+                            'hungry': False,
+                            'fedThisSeason': True,
+                        },
+                    ],
+                },
+                ensure_ascii=False,
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        market_response = self.client.get(
+            f'/api/game/market/{session_id}/1?counterpartyType=shop&counterpartyId=1'
+        )
+        self.assertEqual(market_response.status_code, 200)
+        display_buy_price = int(market_response.json()['market']['black']['sell'])
+
+        send = self.client.post(
+            '/api/game/trade-requests/send',
+            json={
+                'sessionId': session_id,
+                'seasonNumber': 1,
+                'counterpartyType': 'shop',
+                'counterpartyId': 1,
+                'items': [
+                    {
+                        'catId': 'kitten-black-m-1',
+                        'catType': 'black',
+                        'catColor': 'black',
+                        'catSex': 'M',
+                        'proposedPrice': display_buy_price,
+                        'unitPrice': display_buy_price,
+                        'quantity': 1,
+                        'currency': 'COIN',
+                        'side': 'SELL',
+                    }
+                ],
+            },
+        )
+        self.assertEqual(send.status_code, 200)
+        request_id = send.json()['request']['id']
+
+        db = SessionLocal()
+        try:
+            req = db.get(TradeRequest, request_id)
+            req.updated_at = datetime.utcnow() - timedelta(seconds=10)
+            db.commit()
+        finally:
+            db.close()
+
+        requests_response = self.client.get(f'/api/game/trade-requests/{session_id}/1')
+        self.assertEqual(requests_response.status_code, 200)
+
+        db = SessionLocal()
+        try:
+            req = db.get(TradeRequest, request_id)
+            self.assertEqual(str(req.state), 'ACCEPTED')
+
+            session = db.get(GameSession, session_id)
+            inventory = crud._parse_inventory(session.inventory_json or '{}')
+            remaining_ids = [item['id'] for item in inventory['entities']]
+            remaining_kittens = [item for item in inventory['entities'] if item.get('age', 0) < 2]
+
+            self.assertNotIn('kitten-black-m-1', remaining_ids)
+            self.assertIn('adult-black-m', remaining_ids)
+            self.assertEqual(len(remaining_kittens), 2)
+            self.assertEqual(sorted(item['id'] for item in remaining_kittens), ['kitten-black-m-2', 'kitten-black-m-3'])
+        finally:
+            db.close()
+
     def test_animals_outside_house_escape_on_next_season(self):
         self._register_verify_login(email='escape@example.com')
 
@@ -934,7 +1056,7 @@ class PlatformFlowTests(unittest.TestCase):
                             'id': 'adult-black-stale-flag',
                             'color': 'black',
                             'sex': 'M',
-                            'age': 3,
+                            'age': 2,
                             'isKitten': True,
                             'hungry': False,
                             'fedThisSeason': True,
@@ -977,6 +1099,79 @@ class PlatformFlowTests(unittest.TestCase):
         try:
             count = db.query(TradeRequest).filter(TradeRequest.session_id == session_id).count()
             self.assertEqual(count, 0)
+        finally:
+            db.close()
+
+    def test_direct_market_sell_rejects_adult_even_with_stale_kitten_flag(self):
+        self._register_verify_login(email='direct-adult-trade@example.com')
+
+        start = self.client.post('/api/sessions/start')
+        self.assertEqual(start.status_code, 200)
+        session_id = start.json()['sessionId']
+
+        db = SessionLocal()
+        try:
+            session = db.get(GameSession, session_id)
+            session.inventory_json = json.dumps(
+                {
+                    'counts': {
+                        'black': {'M': 1, 'F': 0},
+                        'white': {'M': 0, 'F': 0},
+                        'gray': {'M': 0, 'F': 0},
+                        'ginger': {'M': 0, 'F': 0},
+                    },
+                    'entities': [
+                        {
+                            'id': 'adult-black-direct',
+                            'color': 'black',
+                            'sex': 'M',
+                            'age': 2,
+                            'isKitten': True,
+                            'hungry': False,
+                            'fedThisSeason': True,
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        trade = self.client.post(
+            '/api/game/trade',
+            json={
+                'sessionId': session_id,
+                'seasonNumber': 1,
+                'action': 'sell',
+                'catType': 'black',
+                'catSex': 'M',
+                'qty': 1,
+                'entityId': 'adult-black-direct',
+                'counterpartyType': 'shop',
+                'counterpartyId': 1,
+            },
+        )
+        self.assertEqual(trade.status_code, 200)
+        self.assertFalse(trade.json()['ok'])
+        self.assertEqual(trade.json()['error'], 'ONLY_KITTENS_CAN_BE_TRADED')
+
+        db = SessionLocal()
+        try:
+            session = db.get(GameSession, session_id)
+            inventory = crud._parse_inventory(session.inventory_json or '{}')
+            self.assertEqual([item['id'] for item in inventory['entities']], ['adult-black-direct'])
+
+            trade_event_count = (
+                db.query(GameEvent)
+                .filter(
+                    GameEvent.session_id == session_id,
+                    GameEvent.season_number == 1,
+                    GameEvent.event_type == 'trade_market',
+                )
+                .count()
+            )
+            self.assertEqual(trade_event_count, 0)
         finally:
             db.close()
 
@@ -1229,6 +1424,276 @@ class PlatformFlowTests(unittest.TestCase):
             )
         else:
             self.assertTrue(child_request.get('messageCode'))
+
+    def test_sick_trade_request_is_rejected_by_backend(self):
+        self._register_verify_login(email='sick-trade@example.com')
+
+        start = self.client.post('/api/sessions/start')
+        self.assertEqual(start.status_code, 200)
+        session_id = start.json()['sessionId']
+
+        db = SessionLocal()
+        try:
+            session = db.get(GameSession, session_id)
+            session.inventory_json = json.dumps(
+                {
+                    'counts': {
+                        'black': {'M': 1, 'F': 0},
+                        'white': {'M': 0, 'F': 0},
+                        'gray': {'M': 0, 'F': 0},
+                        'ginger': {'M': 0, 'F': 0},
+                    },
+                    'entities': [
+                        {
+                            'id': 'sick-black-1',
+                            'color': 'black',
+                            'sex': 'M',
+                            'age': 1,
+                            'isKitten': True,
+                            'hungry': False,
+                            'fedThisSeason': True,
+                            'isSick': True,
+                            'diseaseType': 'FLEAS',
+                            'healthStatus': 'SICK',
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        send = self.client.post(
+            '/api/game/trade-requests/send',
+            json={
+                'sessionId': session_id,
+                'seasonNumber': 1,
+                'counterpartyType': 'shop',
+                'counterpartyId': 1,
+                'items': [
+                    {
+                        'catId': 'sick-black-1',
+                        'catType': 'black',
+                        'catColor': 'black',
+                        'catSex': 'M',
+                        'proposedPrice': 8,
+                        'unitPrice': 8,
+                        'quantity': 1,
+                        'currency': 'COIN',
+                        'side': 'SELL',
+                    }
+                ],
+            },
+        )
+        self.assertEqual(send.status_code, 200)
+        self.assertFalse(send.json()['ok'])
+        self.assertEqual(send.json()['error'], 'SICK_KITTENS_CANNOT_BE_TRADED')
+
+    def test_direct_market_sell_rejects_sick_kitten(self):
+        self._register_verify_login(email='direct-sick-trade@example.com')
+
+        start = self.client.post('/api/sessions/start')
+        self.assertEqual(start.status_code, 200)
+        session_id = start.json()['sessionId']
+
+        db = SessionLocal()
+        try:
+            session = db.get(GameSession, session_id)
+            session.inventory_json = json.dumps(
+                {
+                    'counts': {
+                        'black': {'M': 1, 'F': 0},
+                        'white': {'M': 0, 'F': 0},
+                        'gray': {'M': 0, 'F': 0},
+                        'ginger': {'M': 0, 'F': 0},
+                    },
+                    'entities': [
+                        {
+                            'id': 'sick-black-2',
+                            'color': 'black',
+                            'sex': 'M',
+                            'age': 0,
+                            'isKitten': True,
+                            'hungry': False,
+                            'fedThisSeason': True,
+                            'isSick': True,
+                            'diseaseType': 'POISONING',
+                            'healthStatus': 'SICK',
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.post(
+            '/api/game/trade',
+            json={
+                'sessionId': session_id,
+                'seasonNumber': 1,
+                'action': 'sell',
+                'catType': 'black',
+                'catSex': 'M',
+                'entityId': 'sick-black-2',
+                'counterpartyType': 'shop',
+                'counterpartyId': 1,
+                'qty': 1,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()['ok'])
+        self.assertEqual(response.json()['error'], 'SICK_KITTENS_CANNOT_BE_TRADED')
+
+    def test_finish_season_untreated_sick_kitten_escapes_and_is_logged(self):
+        self._register_verify_login(email='sick-escape@example.com')
+
+        start = self.client.post('/api/sessions/start')
+        self.assertEqual(start.status_code, 200)
+        session_id = start.json()['sessionId']
+
+        db = SessionLocal()
+        try:
+            session = db.get(GameSession, session_id)
+            session.inventory_json = json.dumps(
+                {
+                    'counts': {
+                        'black': {'M': 1, 'F': 0},
+                        'white': {'M': 0, 'F': 0},
+                        'gray': {'M': 0, 'F': 0},
+                        'ginger': {'M': 0, 'F': 0},
+                    },
+                    'entities': [
+                        {
+                            'id': 'sick-home-black-1',
+                            'color': 'black',
+                            'sex': 'M',
+                            'age': 0,
+                            'isKitten': True,
+                            'hungry': False,
+                            'fedThisSeason': True,
+                            'isSick': True,
+                            'diseaseType': 'BROKEN_PAW',
+                            'healthStatus': 'SICK',
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        finish = self.client.post(
+            '/api/game/season/finish',
+            json={
+                'sessionId': session_id,
+                'seasonNumber': 1,
+                'finishEarly': False,
+                'nursery': {
+                    'coins': 20,
+                    'hasHome': True,
+                    'cats': [],
+                    'home': {
+                        'parents': {'left': [None, None], 'right': [None, None]},
+                        'kittens': [
+                            {
+                                'id': 'sick-home-black-1',
+                                'color': 'black',
+                                'sex': 'M',
+                                'age': 0,
+                                'isKitten': True,
+                                'isSick': True,
+                                'diseaseType': 'BROKEN_PAW',
+                                'healthStatus': 'SICK',
+                            }
+                        ] + [None] * 11,
+                        'breedPending': {'left': False, 'right': False},
+                    },
+                },
+                'nurseryCoinsDelta': 0,
+            },
+        )
+        self.assertEqual(finish.status_code, 200)
+        season_result = finish.json()['seasonResult']
+        self.assertEqual(season_result['escapedCats'], 1)
+        self.assertEqual(season_result['escapedAnimals'][0]['id'], 'sick-home-black-1')
+        self.assertEqual(season_result['escapedAnimals'][0]['escapeReason'], 'SICK_UNTREATED')
+
+        next_state = self.client.get(f'/api/game/state/{session_id}/2')
+        self.assertEqual(next_state.status_code, 200)
+        self.assertEqual(next_state.json()['inventoryEntities'], [])
+
+        db = SessionLocal()
+        try:
+            sick_escape_event = (
+                db.query(GameEvent)
+                .filter(
+                    GameEvent.session_id == session_id,
+                    GameEvent.season_number == 1,
+                    GameEvent.event_type == 'kitten_escaped_sick',
+                )
+                .one_or_none()
+            )
+            self.assertIsNotNone(sick_escape_event)
+            payload = json.loads(sick_escape_event.payload_json or '{}')
+            self.assertEqual(payload.get('catId'), 'sick-home-black-1')
+            self.assertEqual(payload.get('diseaseType'), 'BROKEN_PAW')
+            self.assertEqual(payload.get('escapeReason'), 'SICK_UNTREATED')
+        finally:
+            db.close()
+
+    def test_progress_save_and_load_preserves_disease_fields(self):
+        self._register_verify_login(email='progress-disease@example.com')
+
+        start = self.client.post('/api/sessions/start')
+        self.assertEqual(start.status_code, 200)
+        session_id = start.json()['sessionId']
+
+        nursery = {
+            'coins': 11,
+            'hasHome': True,
+            'cats': [],
+            'home': {
+                'parents': {'left': [None, None], 'right': [None, None]},
+                'kittens': [
+                    {
+                        'id': 'persist-sick-1',
+                        'color': 'gray',
+                        'sex': 'F',
+                        'age': 1,
+                        'isKitten': True,
+                        'isSick': True,
+                        'diseaseType': 'RINGWORM',
+                        'healthStatus': 'SICK',
+                        'healedAtSeason': None,
+                    }
+                ] + [None] * 11,
+                'breedPending': {'left': False, 'right': False},
+            },
+        }
+
+        save = self.client.post(
+            '/api/game/progress/save',
+            json={
+                'sessionId': session_id,
+                'seasonNumber': 1,
+                'nursery': nursery,
+                'nurseryCoinsDelta': 0,
+                'timeLeft': 120,
+            },
+        )
+        self.assertEqual(save.status_code, 200)
+
+        get_progress = self.client.get(f'/api/game/progress/{session_id}/1')
+        self.assertEqual(get_progress.status_code, 200)
+        self.assertTrue(get_progress.json()['found'])
+        kitten = get_progress.json()['progress']['nursery']['home']['kittens'][0]
+        self.assertEqual(kitten['isSick'], True)
+        self.assertEqual(kitten['diseaseType'], 'RINGWORM')
+        self.assertEqual(kitten['healthStatus'], 'SICK')
 
 
 if __name__ == '__main__':

@@ -47,7 +47,15 @@ const CATTERIES = [
 const YOUR_CATTTERY_ID = 1
 const VALID_SEX = new Set(['M', 'F'])
 const TRACKED_INVENTORY_COLORS = ['white', 'black', 'gray', 'ginger']
-const DEFAULT_ADULT_AGE = 3
+const DEFAULT_ADULT_AGE = 2
+const DISEASE_TYPES = ['RINGWORM', 'FLEAS', 'POISONING', 'BROKEN_PAW']
+const DISEASE_CHANCE = 0.2
+const LEGACY_DISEASE_MAP = {
+  lichen: 'RINGWORM',
+  fleas: 'FLEAS',
+  poisoning: 'POISONING',
+  brokenpaw: 'BROKEN_PAW',
+}
 const COLOR_ALIAS = {
   orange: 'ginger',
 }
@@ -146,6 +154,70 @@ const normalizeSex = (value) => {
   return VALID_SEX.has(normalized) ? normalized : null
 }
 
+const normalizeDiseaseType = (value) => {
+  const normalized = String(value ?? '')
+    .trim()
+    .toUpperCase()
+  if (DISEASE_TYPES.includes(normalized)) return normalized
+  return LEGACY_DISEASE_MAP[String(value ?? '').trim().toLowerCase()] || null
+}
+
+const resolveDiseaseState = (cat) => {
+  const diseaseType = normalizeDiseaseType(cat?.diseaseType ?? cat?.sick)
+  const rawHealthStatus = String(cat?.healthStatus ?? '').trim().toUpperCase()
+  const healedAtSeasonValue = Number(cat?.healedAtSeason)
+  const healedAtSeason = Number.isFinite(healedAtSeasonValue) ? Math.max(0, Math.floor(healedAtSeasonValue)) : null
+  if (rawHealthStatus === 'HEALED') {
+    return {
+      isSick: false,
+      diseaseType: null,
+      healthStatus: 'HEALED',
+      healedAtSeason,
+    }
+  }
+  const isSick = Boolean(cat?.isSick) || diseaseType != null || rawHealthStatus === 'SICK'
+  if (isSick) {
+    return {
+      isSick: true,
+      diseaseType,
+      healthStatus: 'SICK',
+      healedAtSeason,
+    }
+  }
+  return {
+    isSick: false,
+    diseaseType: null,
+    healthStatus: 'HEALTHY',
+    healedAtSeason,
+  }
+}
+
+const isNurseryCatSick = (cat) => resolveDiseaseState(cat).isSick
+
+const randomDisease = (rng = Math.random) => {
+  const safeRng = typeof rng === 'function' ? rng : Math.random
+  const index = Math.max(0, Math.min(DISEASE_TYPES.length - 1, Math.floor(safeRng() * DISEASE_TYPES.length)))
+  return DISEASE_TYPES[index]
+}
+
+const maybeCreateBirthDisease = (rng = Math.random) => {
+  const safeRng = typeof rng === 'function' ? rng : Math.random
+  if (safeRng() >= DISEASE_CHANCE) {
+    return {
+      isSick: false,
+      diseaseType: null,
+      healthStatus: 'HEALTHY',
+      healedAtSeason: null,
+    }
+  }
+  return {
+    isSick: true,
+    diseaseType: randomDisease(safeRng),
+    healthStatus: 'SICK',
+    healedAtSeason: null,
+  }
+}
+
 const resolveKittenStatus = (cat, adultAge = DEFAULT_ADULT_AGE) => {
   const age = Number(cat?.age ?? cat?.ageSeasons)
   if (Number.isFinite(age)) return age < adultAge
@@ -182,10 +254,13 @@ const createBoughtKitten = (color, sex, idx = 0) => ({
   color: normalizeColor(color),
   age: 0,
   hungry: true,
-  sick: null,
   fedThisSeason: false,
   locked: false,
   isKitten: true,
+  isSick: false,
+  diseaseType: null,
+  healthStatus: 'HEALTHY',
+  healedAtSeason: null,
 })
 
 const COLOR_LABEL_RU = {
@@ -207,10 +282,21 @@ const describeEscapedHungryCat = (cat) => {
   const colorLabel = COLOR_LABEL_RU[color] || color
   const sexLabel = SEX_LABEL_RU[sex] || sex
   const shortId = String(cat?.id ?? '').slice(0, 6) || '------'
-  return `${role} (${colorLabel}, ${sexLabel}) #${shortId}`
+  const escapeReason = String(cat?.escapeReason || '').trim().toUpperCase()
+  const suffix =
+    escapeReason === 'SICK_UNTREATED'
+      ? ' • сбежал из-за болезни'
+      : escapeReason === 'OUTSIDE_HOME'
+        ? ' • вне домика'
+        : ''
+  return `${role} (${colorLabel}, ${sexLabel}) #${shortId}${suffix}`
 }
 
-const buildSeasonTransition = (prevNursery, adultAge = DEFAULT_ADULT_AGE) => {
+export const buildSeasonTransition = (
+  prevNursery,
+  adultAge = DEFAULT_ADULT_AGE,
+  { rng = Math.random } = {}
+) => {
   const prev = prevNursery && typeof prevNursery === 'object' ? prevNursery : createDefaultNursery()
   const persistedEscapedIds = new Set(
     (Array.isArray(prev?.escapedCatIds) ? prev.escapedCatIds : [])
@@ -231,11 +317,13 @@ const buildSeasonTransition = (prevNursery, adultAge = DEFAULT_ADULT_AGE) => {
   )
   const protectedIds = new Set([...homeParentIds, ...homeKittenIds])
   const escapedById = new Map()
+  const escapedSickKittens = []
+  const bornSickKittens = []
   const markEscaped = (cat) => {
     if (!cat || !cat.id) return
     const id = String(cat.id)
     if (protectedIds.has(id) || escapedById.has(id)) return
-    escapedById.set(id, { ...cat, id })
+    escapedById.set(id, { ...cat, id, status: 'ESCAPED', isEscaped: true, escapeReason: 'OUTSIDE_HOME' })
   }
 
   const prevCats = Array.isArray(prev?.cats) ? prev.cats : []
@@ -248,7 +336,6 @@ const buildSeasonTransition = (prevNursery, adultAge = DEFAULT_ADULT_AGE) => {
   const escapedIds = new Set(escapedById.keys())
   const escapedCatIdsSet = new Set([...persistedEscapedIds, ...escapedIds])
   const escapedCatIds = Array.from(escapedCatIdsSet)
-  const escapedHungryCats = Array.from(escapedById.values())
   let coins = Math.max(0, Number(prev.coins ?? 0) - 3)
 
   if (!prev.hasHome) {
@@ -267,7 +354,9 @@ const buildSeasonTransition = (prevNursery, adultAge = DEFAULT_ADULT_AGE) => {
         insuranceActive: prev.insuranceNext,
         insuranceNext: false,
       },
-      escapedHungryCats,
+      escapedHungryCats: Array.from(escapedById.values()),
+      escapedSickKittens: [],
+      bornSickKittens: [],
     }
   }
 
@@ -293,7 +382,19 @@ const buildSeasonTransition = (prevNursery, adultAge = DEFAULT_ADULT_AGE) => {
   }).map((kitten) => {
     if (!kitten) return null
     if (escapedCatIdsSet.has(String(kitten.id))) return null
-    if (kitten.sick) return null
+    if (isNurseryCatSick(kitten)) {
+      const escaped = {
+        ...kitten,
+        status: 'ESCAPED',
+        isEscaped: true,
+        escapeReason: 'SICK_UNTREATED',
+      }
+      const escapedId = String(kitten.id)
+      escapedById.set(escapedId, escaped)
+      escapedCatIdsSet.add(escapedId)
+      escapedSickKittens.push(escaped)
+      return null
+    }
     return kitten
   })
 
@@ -307,6 +408,7 @@ const buildSeasonTransition = (prevNursery, adultAge = DEFAULT_ADULT_AGE) => {
       hungry: true,
       fedThisSeason: false,
       locked: false,
+      ...resolveDiseaseState(cat),
     }
   })
 
@@ -318,6 +420,7 @@ const buildSeasonTransition = (prevNursery, adultAge = DEFAULT_ADULT_AGE) => {
       age: Number(kitten.age ?? 0) + 1,
       hungry: true,
       fedThisSeason: false,
+      ...resolveDiseaseState(kitten),
     }
     if (next.age >= adultAge) {
       grown.push({ ...next, hungry: true, fedThisSeason: false, isKitten: false })
@@ -377,12 +480,21 @@ const buildSeasonTransition = (prevNursery, adultAge = DEFAULT_ADULT_AGE) => {
       const slice = nextKittens.slice(from, to)
       const slot = slice.findIndex((kitten) => !kitten)
       if (slot < 0) return
-      nextKittens[from + slot] = {
+      const diseaseState = maybeCreateBirthDisease(rng)
+      const nextBaby = {
         ...baby,
         age: 0,
         hungry: false,
         fedThisSeason: true,
         isKitten: true,
+        locked: false,
+        ...diseaseState,
+      }
+      nextKittens[from + slot] = {
+        ...nextBaby,
+      }
+      if (nextBaby.isSick) {
+        bornSickKittens.push(nextBaby)
       }
     })
   }
@@ -400,11 +512,13 @@ const buildSeasonTransition = (prevNursery, adultAge = DEFAULT_ADULT_AGE) => {
         kittens: nextKittens,
         breedPending: { left: false, right: false },
       },
-      escapedCatIds,
+      escapedCatIds: Array.from(escapedCatIdsSet),
       insuranceActive: prev.insuranceNext,
       insuranceNext: false,
     },
-    escapedHungryCats,
+    escapedHungryCats: Array.from(escapedById.values()),
+    escapedSickKittens,
+    bornSickKittens,
   }
 }
 
@@ -551,7 +665,7 @@ const normalizeSeasonNumber = (value, fallback = 0) => {
   return Math.max(0, Math.floor(normalized))
 }
 
-const normalizeNurseryCat = (cat, { forceKitten = null, adultAge = DEFAULT_ADULT_AGE } = {}) => {
+export const normalizeNurseryCat = (cat, { forceKitten = null, adultAge = DEFAULT_ADULT_AGE } = {}) => {
   if (!cat || typeof cat !== 'object') return null
   if (cat.id == null) return null
   const sex = normalizeSex(cat.sex) || 'M'
@@ -564,6 +678,7 @@ const normalizeNurseryCat = (cat, { forceKitten = null, adultAge = DEFAULT_ADULT
         ? forceKitten
         : false
       : resolvedKittenStatus
+  const diseaseState = resolveDiseaseState(cat)
 
   return {
     ...cat,
@@ -575,10 +690,11 @@ const normalizeNurseryCat = (cat, { forceKitten = null, adultAge = DEFAULT_ADULT
     hungry: Boolean(cat.hungry),
     fedThisSeason: Boolean(cat.fedThisSeason),
     locked: Boolean(cat.locked),
+    ...diseaseState,
   }
 }
 
-const normalizeNurseryState = (rawNursery, adultAge = DEFAULT_ADULT_AGE) => {
+export const normalizeNurseryState = (rawNursery, adultAge = DEFAULT_ADULT_AGE) => {
   const defaults = createDefaultNursery()
   if (!rawNursery || typeof rawNursery !== 'object') return defaults
 
@@ -661,6 +777,9 @@ const formatTradeRequestError = (value) => {
   if (code === 'ONLY_KITTENS_CAN_BE_TRADED') {
     return 'Продавать можно только котят'
   }
+  if (code === 'SICK_KITTENS_CANNOT_BE_TRADED') {
+    return 'Больных котят нельзя продавать'
+  }
   return String(value ?? '')
 }
 
@@ -731,6 +850,23 @@ export default function PlayMapPage({ me }) {
     setPlayAccessDenied(true)
     navigate('/competencies', { replace: true })
   }, [navigate, purgeSessionProgress])
+
+  const logGameEvent = useCallback(
+    async (eventType, payload = {}, seasonNumber = season) => {
+      if (!sessionId || !eventType) return
+      try {
+        await api.gameEvent({
+          sessionId,
+          seasonNumber,
+          eventType,
+          payload,
+        })
+      } catch {
+        // best-effort logging; gameplay must not depend on analytics events
+      }
+    },
+    [sessionId, season]
+  )
 
   const isCurrentSessionRequest = useCallback(
     (request) => {
@@ -843,6 +979,10 @@ export default function PlayMapPage({ me }) {
               hungry: Boolean(entity?.hungry),
               fedThisSeason: Boolean(entity?.fedThisSeason),
               locked: Boolean(entity?.locked),
+              isSick: Boolean(entity?.isSick),
+              diseaseType: entity?.diseaseType ?? entity?.sick ?? null,
+              healthStatus: entity?.healthStatus,
+              healedAtSeason: entity?.healedAtSeason ?? null,
             },
             { forceKitten: true, adultAge }
           )
@@ -937,6 +1077,8 @@ export default function PlayMapPage({ me }) {
         isKitten: true,
         hungry: Boolean(cat.hungry),
         fedThisSeason: Boolean(cat.fedThisSeason),
+        locked: Boolean(cat.locked),
+        ...resolveDiseaseState(cat),
       }))
 
     const backendEntities = backendInventoryEntities.filter(
@@ -961,6 +1103,11 @@ export default function PlayMapPage({ me }) {
         isKitten: resolveKittenStatus(entity, adultAge),
         hungry: Boolean(entity?.hungry ?? fromNursery?.hungry),
         fedThisSeason: Boolean(entity?.fedThisSeason ?? fromNursery?.fedThisSeason),
+        locked: Boolean(entity?.locked ?? fromNursery?.locked),
+        ...resolveDiseaseState({
+          ...fromNursery,
+          ...entity,
+        }),
       }
     })
 
@@ -1497,10 +1644,11 @@ export default function PlayMapPage({ me }) {
             const colorMatch = normalizeColor(cat?.color) === normalizedColor
             const sexMatch = normalizedSex ? normalizeSex(cat?.sex) === normalizedSex : true
             const sellableKitten =
-              cat?.isKitten &&
+              resolveKittenStatus(cat, adultAge) &&
               !assigned.has(cat.id) &&
               !cat.locked &&
-              !cat.hungry
+              !cat.hungry &&
+              !isNurseryCatSick(cat)
             if (sellableKitten && colorMatch && sexMatch) {
               remaining -= 1
               return null
@@ -1512,10 +1660,11 @@ export default function PlayMapPage({ me }) {
             const colorMatch = normalizeColor(cat?.color) === normalizedColor
             const sexMatch = normalizedSex ? normalizeSex(cat?.sex) === normalizedSex : true
             const sellableKitten =
-              cat?.isKitten &&
+              resolveKittenStatus(cat, adultAge) &&
               !assigned.has(cat.id) &&
               !cat.locked &&
-              !cat.hungry
+              !cat.hungry &&
+              !isNurseryCatSick(cat)
             if (remaining > 0 && sellableKitten && colorMatch && sexMatch) {
               remaining -= 1
               return
@@ -1530,13 +1679,14 @@ export default function PlayMapPage({ me }) {
               kittens: nextHomeKittens,
             },
           }
-        }
+          }
         return prev
       })
+      await loadData()
     } catch (err) {
       if (handleInactivityTimeoutError(err)) return
       if (handleTerminalSessionError(err)) return
-      setError(err.message || 'Trade failed')
+      setError(formatTradeRequestError(err?.message || 'Trade failed'))
     } finally {
       setBusy(false)
     }
@@ -1717,6 +1867,16 @@ export default function PlayMapPage({ me }) {
         currentNursery,
         nurseryCoinsDelta
       )
+      if (seasonTransition?.bornSickKittens?.length) {
+        await Promise.allSettled(
+          seasonTransition.bornSickKittens.map((cat) =>
+            logGameEvent('kitten_born_sick', {
+              catId: cat.id,
+              diseaseType: cat.diseaseType,
+            })
+          )
+        )
+      }
       setEscapedHungryCats(
         Array.isArray(res?.seasonResult?.escapedAnimals) && res.seasonResult.escapedAnimals.length
           ? res.seasonResult.escapedAnimals
@@ -1749,7 +1909,7 @@ export default function PlayMapPage({ me }) {
     } finally {
       setBusy(false)
     }
-  }, [season, sessionId, seasonFinishedLocked, seasonLedger, handleInactivityTimeoutError, handleTerminalSessionError, adultAge, nurseryCoinsDelta])
+  }, [season, sessionId, seasonFinishedLocked, seasonLedger, handleInactivityTimeoutError, handleTerminalSessionError, adultAge, nurseryCoinsDelta, logGameEvent])
 
   useEffect(() => {
     if (timeLeft !== 0) return
@@ -2051,7 +2211,7 @@ export default function PlayMapPage({ me }) {
                 ЖИВОТНЫЕ СБЕЖАЛИ
               </div>
               <div className="modal__desc season-change-modal__desc">
-                К концу сезона в питомнике остались животные вне домика, поэтому они сбежали.
+                К концу сезона часть животных осталась вне домика или без лечения, поэтому они сбежали.
               </div>
             </div>
             <div className="modal__body">
@@ -2062,7 +2222,7 @@ export default function PlayMapPage({ me }) {
                 </div>
                 <div className="escaped-hungry-modal__card">
                   <span className="escaped-hungry-modal__label">Правило сезона</span>
-                  <strong>Вне домика оставаться нельзя</strong>
+                  <strong>Домик и лечение обязательны</strong>
                 </div>
               </div>
               <div className="escaped-hungry-modal__panel">
@@ -2114,6 +2274,7 @@ export default function PlayMapPage({ me }) {
       <MyNurseryOverlay
         open={nurseryOpen}
         onClose={() => setNurseryOpen(false)}
+        sessionId={sessionId}
         nursery={nursery}
         setNursery={setNursery}
         playerAvatarUrl={me?.avatarUrl || null}

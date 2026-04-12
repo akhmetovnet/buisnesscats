@@ -122,7 +122,7 @@ class GameEvent(Base):
 
     season_number: Mapped[int] = mapped_column(Integer, nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")  # flexible gameplay payload, including nursery disease events
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -146,7 +146,7 @@ class GameProgress(Base):
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey("game_sessions.id"), nullable=False)
     season_number: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    nursery_json: Mapped[str] = mapped_column(Text, default="{}")
+    nursery_json: Mapped[str] = mapped_column(Text, default="{}")  # nursery state snapshot, including kitten disease fields
     nursery_coins_delta: Mapped[int] = mapped_column(Integer, default=0)
     time_left: Mapped[int] = mapped_column(Integer, default=0)
 

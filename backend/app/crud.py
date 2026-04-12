@@ -282,6 +282,20 @@ def finish_season(
         db.refresh(next_season)
 
     add_event(db, session_id, season_number, "season_summary", meta)
+    for entity in escape_transition.get("escapedAnimals", []) or []:
+        if str(entity.get("escapeReason") or "").strip().upper() != "SICK_UNTREATED":
+            continue
+        add_event(
+            db,
+            session_id,
+            season_number,
+            "kitten_escaped_sick",
+            {
+                "catId": entity.get("id"),
+                "diseaseType": entity.get("diseaseType"),
+                "escapeReason": "SICK_UNTREATED",
+            },
+        )
 
     return season, next_season, escape_transition
 
@@ -693,6 +707,31 @@ def _normalize_entity(entity: dict) -> dict | None:
         is_kitten = explicit_kitten
     else:
         is_kitten = age < ADULT_AGE
+    legacy_disease = {
+        "lichen": "RINGWORM",
+        "fleas": "FLEAS",
+        "poisoning": "POISONING",
+        "brokenpaw": "BROKEN_PAW",
+    }.get(str(entity.get("sick") or "").strip().lower())
+    disease_type = str(entity.get("diseaseType") or legacy_disease or "").strip().upper() or None
+    if disease_type not in {"RINGWORM", "FLEAS", "POISONING", "BROKEN_PAW"}:
+        disease_type = None
+    raw_health_status = str(entity.get("healthStatus") or "").strip().upper()
+    healed_at_season_raw = entity.get("healedAtSeason")
+    healed_at_season = _safe_int(healed_at_season_raw, -1)
+    healed_at_season = healed_at_season if healed_at_season >= 0 else None
+    is_sick = bool(entity.get("isSick")) or disease_type is not None
+    if raw_health_status == "HEALED":
+        is_sick = False
+        disease_type = None
+        health_status = "HEALED"
+    elif raw_health_status == "SICK" or is_sick:
+        is_sick = True
+        health_status = "SICK"
+    else:
+        is_sick = False
+        disease_type = None
+        health_status = "HEALTHY"
     return {
         "id": str(entity.get("id") or f"inv-{uuid.uuid4().hex[:12]}"),
         "color": color,
@@ -701,6 +740,11 @@ def _normalize_entity(entity: dict) -> dict | None:
         "isKitten": is_kitten,
         "hungry": bool(entity.get("hungry", False)),
         "fedThisSeason": bool(entity.get("fedThisSeason", False)),
+        "locked": bool(entity.get("locked", False)),
+        "isSick": is_sick,
+        "diseaseType": disease_type,
+        "healthStatus": health_status,
+        "healedAtSeason": healed_at_season,
     }
 
 
@@ -782,6 +826,23 @@ def _apply_nursery_escape_transition(
                     "id": entity_id,
                     "status": "ESCAPED",
                     "isEscaped": True,
+                    "escapeReason": "OUTSIDE_HOME",
+                }
+            )
+            continue
+
+        if (
+            bool(snapshot.get("isSick"))
+            and str(snapshot.get("healthStatus") or "").strip().upper() != "HEALED"
+            and _safe_int(snapshot.get("age", current_entity.get("age", 0)), 0) < adult_age
+        ):
+            escaped_entities.append(
+                {
+                    **snapshot,
+                    "id": entity_id,
+                    "status": "ESCAPED",
+                    "isEscaped": True,
+                    "escapeReason": "SICK_UNTREATED",
                 }
             )
             continue
@@ -797,6 +858,11 @@ def _apply_nursery_escape_transition(
                 "isKitten": next_age < adult_age,
                 "hungry": True,
                 "fedThisSeason": False,
+                "locked": False,
+                "isSick": bool(snapshot.get("isSick")),
+                "diseaseType": snapshot.get("diseaseType"),
+                "healthStatus": snapshot.get("healthStatus") or ("SICK" if snapshot.get("isSick") else "HEALTHY"),
+                "healedAtSeason": snapshot.get("healedAtSeason"),
             }
         )
 
@@ -1012,6 +1078,94 @@ def _remove_entity_by_id(entities: list[dict], entity_id: str | None, color: str
     return next_entities, removed
 
 
+def _entity_is_sellable_kitten(entity: dict | None) -> bool:
+    if not isinstance(entity, dict):
+        return False
+    if bool(entity.get("isSick")):
+        return False
+    age_raw = entity.get("age", entity.get("ageSeasons"))
+    age = _safe_int(age_raw, -1)
+    if age >= 0:
+        return age < ADULT_AGE
+    explicit = entity.get("isKitten")
+    if isinstance(explicit, bool):
+        return explicit
+    return False
+
+
+def _recount_inventory_counts(entities: list[dict]) -> dict[str, dict[str, int]]:
+    counts = _empty_inventory_counts()
+    for entity in entities:
+        color = _normalize_color(entity.get("color"))
+        sex = _normalize_sex(entity.get("sex"))
+        if color in CAT_TYPES and sex in CAT_SEXES:
+            counts[color][sex] += 1
+    return counts
+
+
+def _remove_sellable_entities(
+    entities: list[dict],
+    *,
+    color: str,
+    sex: str | None,
+    qty: int,
+    entity_id: str | None = None,
+) -> tuple[list[dict], bool, str | None]:
+    if qty <= 0 or not entities:
+        return entities, False, "not_enough_inventory"
+
+    normalized_sex = _normalize_sex(sex)
+    if entity_id:
+        matched = False
+        removed = False
+        next_entities = []
+        for entity in entities:
+            if removed:
+                next_entities.append(entity)
+                continue
+            same_id = str(entity.get("id")) == str(entity_id)
+            same_color = _normalize_color(entity.get("color")) == color
+            same_sex = _normalize_sex(entity.get("sex")) == normalized_sex if normalized_sex else True
+            if same_id and same_color and same_sex:
+                matched = True
+                if bool(entity.get("isSick")):
+                    return entities, False, "SICK_KITTENS_CANNOT_BE_TRADED"
+                if not _entity_is_sellable_kitten(entity):
+                    return entities, False, "ONLY_KITTENS_CAN_BE_TRADED"
+                removed = True
+                continue
+            next_entities.append(entity)
+        if not matched:
+            return entities, False, "not_enough_inventory"
+        return next_entities, True, None
+
+    matching_entities = [
+        entity
+        for entity in entities
+        if _normalize_color(entity.get("color")) == color
+        and (_normalize_sex(entity.get("sex")) == normalized_sex if normalized_sex else True)
+    ]
+    if len(matching_entities) < qty:
+        return entities, False, "not_enough_inventory"
+
+    sellable_count = sum(1 for entity in matching_entities if _entity_is_sellable_kitten(entity))
+    if sellable_count < qty:
+        if any(bool(entity.get("isSick")) for entity in matching_entities):
+            return entities, False, "SICK_KITTENS_CANNOT_BE_TRADED"
+        return entities, False, "ONLY_KITTENS_CAN_BE_TRADED"
+
+    remaining = qty
+    next_entities = []
+    for entity in entities:
+        same_color = _normalize_color(entity.get("color")) == color
+        same_sex = _normalize_sex(entity.get("sex")) == normalized_sex if normalized_sex else True
+        if remaining > 0 and same_color and same_sex and _entity_is_sellable_kitten(entity):
+            remaining -= 1
+            continue
+        next_entities.append(entity)
+    return next_entities, True, None
+
+
 def _append_entities(entities: list[dict], color: str, sex: str, qty: int, first_entity_id: str | None = None) -> list[dict]:
     next_entities = list(entities or [])
     for idx in range(max(0, qty)):
@@ -1025,6 +1179,10 @@ def _append_entities(entities: list[dict], color: str, sex: str, qty: int, first
                 "isKitten": True,
                 "hungry": False,
                 "fedThisSeason": True,
+                "isSick": False,
+                "diseaseType": None,
+                "healthStatus": "HEALTHY",
+                "healedAtSeason": None,
             }
         )
     return next_entities
@@ -1075,14 +1233,20 @@ def trade_market(
     )
 
     if action == "sell":
-        if entity_id:
-            entities, removed = _remove_entity_by_id(entities, entity_id, color, sex)
+        if entities:
+            entities, removed, reason = _remove_sellable_entities(
+                entities,
+                color=color,
+                sex=sex,
+                qty=qty,
+                entity_id=entity_id,
+            )
             if not removed:
-                return False, "not_enough_inventory"
-            counts = _empty_inventory_counts()
-            for entity in entities:
-                counts[entity["color"]][entity["sex"]] += 1
+                return False, reason or "not_enough_inventory"
+            counts = _recount_inventory_counts(entities)
         else:
+            if entity_id:
+                return False, "not_enough_inventory"
             if not _take_from_counts(counts, color, sex, qty):
                 return False, "not_enough_inventory"
             entities = _remove_entities(entities, color, sex, qty)

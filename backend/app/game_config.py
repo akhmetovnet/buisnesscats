@@ -33,7 +33,7 @@ CONFIG_ROLE_PLAYER = _env_choice(
     "cattery",
 )
 
-ADULT_AGE = _env_int("BC_ADULT_AGE", 3)
+ADULT_AGE = _env_int("BC_ADULT_AGE", 2)
 
 ARCHETYPE_DISTRIBUTION = {
     "FARMER": 4,

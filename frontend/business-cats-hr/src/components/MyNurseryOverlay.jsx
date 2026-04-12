@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { api } from '../api.js'
 import './MyNurseryOverlay.css'
 
 const HOME_COST = 3
@@ -89,10 +90,22 @@ const CAT_SPRITES = {
 }
 
 const SICK_ICON = {
-  lichen: '/assets/lichenwhite.png',
-  fleas: '/assets/fleaswhite.png',
-  poisoning: '/assets/poisoningwhite.png',
-  brokenpaw: '/assets/brokenpawwhite.png',
+  RINGWORM: '/assets/lichenwhite.png',
+  FLEAS: '/assets/fleaswhite.png',
+  POISONING: '/assets/poisoningwhite.png',
+  BROKEN_PAW: '/assets/brokenpawwhite.png',
+}
+const LEGACY_DISEASE_MAP = {
+  lichen: 'RINGWORM',
+  fleas: 'FLEAS',
+  poisoning: 'POISONING',
+  brokenpaw: 'BROKEN_PAW',
+}
+const DISEASE_LABEL = {
+  RINGWORM: 'Стригущий лишай',
+  FLEAS: 'Блохи',
+  POISONING: 'Отравление',
+  BROKEN_PAW: 'Поврежденная лапа',
 }
 const SEX_LABEL = {
   M: 'мальчик',
@@ -104,7 +117,7 @@ const COLOR_LABEL = {
   gray: 'серый',
   ginger: 'рыжий',
 }
-const DEFAULT_ADULT_AGE = 3
+const DEFAULT_ADULT_AGE = 2
 
 const resolveColorLabel = (value) => {
   const normalized = normalizeColor(value)
@@ -144,9 +157,81 @@ const getCatMeta = (cat) => {
   return { sex, color }
 }
 
+const normalizeDiseaseType = (value) => {
+  const normalized = String(value ?? '')
+    .trim()
+    .toUpperCase()
+  if (SICK_ICON[normalized]) return normalized
+  return LEGACY_DISEASE_MAP[String(value ?? '').trim().toLowerCase()] || null
+}
+
+export const getDiseaseState = (cat) => {
+  const diseaseType = normalizeDiseaseType(cat?.diseaseType ?? cat?.sick)
+  const rawHealthStatus = String(cat?.healthStatus ?? '').trim().toUpperCase()
+  const healedAtSeasonValue = Number(cat?.healedAtSeason)
+  const healedAtSeason = Number.isFinite(healedAtSeasonValue)
+    ? Math.max(0, Math.floor(healedAtSeasonValue))
+    : null
+
+  if (rawHealthStatus === 'HEALED') {
+    return {
+      isSick: false,
+      diseaseType: null,
+      healthStatus: 'HEALED',
+      healedAtSeason,
+    }
+  }
+
+  const isSick = Boolean(cat?.isSick) || diseaseType != null || rawHealthStatus === 'SICK'
+  if (isSick) {
+    return {
+      isSick: true,
+      diseaseType,
+      healthStatus: 'SICK',
+      healedAtSeason,
+    }
+  }
+
+  return {
+    isSick: false,
+    diseaseType: null,
+    healthStatus: 'HEALTHY',
+    healedAtSeason,
+  }
+}
+
+const isCatSick = (cat) => getDiseaseState(cat).isSick
+
+export const getTreatmentCost = (insuranceActive) => (insuranceActive ? 0 : TREAT_COST)
+
+export const applyKittenTreatment = (nursery, catId, currentSeason) => {
+  const nextSeason = Math.max(0, Number(currentSeason) || 0)
+  const applyTreatment = (cat) => {
+    if (!cat || String(cat?.id ?? '') !== String(catId)) return cat
+    return {
+      ...cat,
+      ...getDiseaseState(cat),
+      isSick: false,
+      diseaseType: null,
+      healthStatus: 'HEALED',
+      healedAtSeason: nextSeason,
+    }
+  }
+
+  return {
+    ...nursery,
+    cats: (nursery?.cats || []).map(applyTreatment),
+    home: {
+      ...nursery?.home,
+      kittens: (nursery?.home?.kittens || []).map((cat) => (cat ? applyTreatment(cat) : cat)),
+    },
+  }
+}
+
 export default function MyNurseryOverlay({
   open,
   onClose,
+  sessionId,
   nursery,
   setNursery,
   playerAvatarUrl = null,
@@ -163,6 +248,22 @@ export default function MyNurseryOverlay({
   const [modal, setModal] = useState(null)
   const [feedQueue, setFeedQueue] = useState([])
   const [inspectTarget, setInspectTarget] = useState(null)
+  const logNurseryEvent = useCallback(
+    async (eventType, payload = {}) => {
+      if (!sessionId || !eventType) return
+      try {
+        await api.gameEvent({
+          sessionId,
+          seasonNumber: Number(seasonNumber) || 1,
+          eventType,
+          payload,
+        })
+      } catch {
+        // best-effort logging only
+      }
+    },
+    [sessionId, seasonNumber]
+  )
 
   useEffect(() => {
     setNursery((prev) => {
@@ -422,32 +523,50 @@ export default function MyNurseryOverlay({
     setModal({ type: 'confirmFeed', cat: queue[0] })
   }
 
-  const handleInspectCat = (cat) => {
-    if (!cat.sick) {
-      setModal({ type: 'error', title: 'Котик здоров' })
-      return
-    }
+  const handleInspectCat = async (cat) => {
+    if (!cat) return
     setInspectTarget(cat)
+    const age = Number(cat?.age ?? cat?.ageSeasons ?? 0)
+    const isKitten = Number.isFinite(age) ? age < adultAge : Boolean(cat?.isKitten)
+    if (!isKitten) return
+    const disease = getDiseaseState(cat)
+    await logNurseryEvent('kitten_examined', {
+      catId: cat.id,
+      diseaseType: disease.diseaseType,
+      healthStatus: disease.healthStatus,
+    })
   }
 
-  const handleTreat = (cat) => {
-    const insured = nursery.insuranceActive
-    if (!insured && coins < TREAT_COST) {
-      openNotEnoughCoinsModal(TREAT_COST)
+  const handleTreat = async (cat) => {
+    const disease = getDiseaseState(cat)
+    if (!disease.isSick) {
+      setModal({ type: 'info', title: 'Лечение не требуется' })
       return
     }
-    if (!insured) {
-      if (!spendCoins(TREAT_COST)) {
-        openNotEnoughCoinsModal(TREAT_COST)
+    const treatmentCost = getTreatmentCost(Boolean(nursery?.insuranceActive))
+    if (treatmentCost > 0 && coins < treatmentCost) {
+      openNotEnoughCoinsModal(treatmentCost)
+      return
+    }
+    if (treatmentCost > 0) {
+      if (!spendCoins(treatmentCost)) {
+        openNotEnoughCoinsModal(treatmentCost)
         return
       }
-      recordSeasonSpend('treatment', TREAT_COST)
+      recordSeasonSpend('treatment', treatmentCost)
     }
-    setNursery((prev) => ({
-      ...prev,
-      cats: prev.cats.map((c) => (c.id === cat.id ? { ...c, sick: null } : c)),
-    }))
+    setNursery((prev) => applyKittenTreatment(prev, cat.id, seasonNumber))
     setInspectTarget(null)
+    setModal({
+      type: 'info',
+      title: treatmentCost > 0 ? 'Котёнок вылечен. Списано 2 монеты.' : 'Котёнок вылечен. Лечение покрыто страховкой.',
+    })
+    await logNurseryEvent('kitten_treated', {
+      catId: cat.id,
+      diseaseType: disease.diseaseType,
+      treatmentCost,
+      coveredByInsurance: treatmentCost === 0,
+    })
   }
 
   const handleInsuranceConfirm = () => {
@@ -882,10 +1001,10 @@ export default function MyNurseryOverlay({
                                         }}
                                       />
                                     ) : null}
-                                    {kitten.sick ? (
+                                    {isCatSick(kitten) ? (
                                       <img
                                         className="sick"
-                                        src={SICK_ICON[kitten.sick]}
+                                        src={SICK_ICON[getDiseaseState(kitten).diseaseType]}
                                         alt=""
                                         onError={(e) => {
                                           e.currentTarget.style.display = 'none'
@@ -946,10 +1065,10 @@ export default function MyNurseryOverlay({
                     }}
                   />
                 ) : null}
-                {cat.sick ? (
+                {isCatSick(cat) ? (
                   <img
                     className="sick"
-                    src={SICK_ICON[cat.sick]}
+                    src={SICK_ICON[getDiseaseState(cat).diseaseType]}
                     alt=""
                     onError={(e) => {
                       e.currentTarget.style.display = 'none'
@@ -1089,7 +1208,7 @@ export default function MyNurseryOverlay({
           <div className="modal modal--size-cats" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <div className="modal__title">Обследование и лечение</div>
-              <div className="modal__desc"><span>Диагностика и лечение выбранного котика</span></div>
+              <div className="modal__desc"><span>Диагностика состояния выбранного животного</span></div>
             </div>
             <div className="modal__body">
               <div className="modal__body-wrapper">
@@ -1097,21 +1216,45 @@ export default function MyNurseryOverlay({
                   {renderCat(inspectTarget, { single: true, readonly: true, count: 1, description: true })}
                 </div>
                 <div className="modal__body-price">
-                  {inspectTarget.sick ? (
-                    <img className="inspect-icon" src={SICK_ICON[inspectTarget.sick]} alt="sick" />
+                  {getDiseaseState(inspectTarget).isSick ? (
+                    <img
+                      className="inspect-icon"
+                      src={SICK_ICON[getDiseaseState(inspectTarget).diseaseType]}
+                      alt="sick"
+                    />
                   ) : null}
-                  <p className="modal__body-price-text">цена лечения</p>
-                  <p className="modal__body-price-coin">
-                    <span className="modal__body-price-coin-icon coin" />
-                    <span className="modal__body-price-coin-count notranslate">
-                      {nursery?.insuranceActive ? 0 : TREAT_COST}
-                    </span>
+                  <p className="modal__body-price-text">
+                    статус: {
+                      getDiseaseState(inspectTarget).isSick
+                        ? 'болен'
+                        : getDiseaseState(inspectTarget).healthStatus === 'HEALED'
+                          ? 'вылечен'
+                          : 'здоров'
+                    }
                   </p>
+                  <div className="modal__desc" style={{ marginTop: 8, textAlign: 'left' }}>
+                    <div>Пол: {SEX_LABEL[normalizeSex(inspectTarget?.sex) || 'M'] || 'котик'}</div>
+                    <div>Окрас: {resolveColorLabel(inspectTarget?.color)}</div>
+                    <div>Возраст: {Number(inspectTarget?.age ?? 0)} сез.</div>
+                    {getDiseaseState(inspectTarget).isSick ? (
+                      <>
+                        <div>Диагноз: {DISEASE_LABEL[getDiseaseState(inspectTarget).diseaseType] || 'неизвестно'}</div>
+                        <div>Стоимость лечения: {getTreatmentCost(Boolean(nursery?.insuranceActive))}</div>
+                        <div>
+                          {nursery?.insuranceActive ? 'Покрывается страховкой' : 'Страховка не покрывает лечение'}
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
               </div>
               <div className="modal__body-actions">
-                <button className="text_button text_button--color-blue" onClick={() => handleTreat(inspectTarget)}>Лечить</button>
-                <button className="text_button text_button--color-transparent" onClick={() => setInspectTarget(null)}>Отмена</button>
+                {getDiseaseState(inspectTarget).isSick ? (
+                  <button className="text_button text_button--color-blue" onClick={() => handleTreat(inspectTarget)}>Лечить</button>
+                ) : (
+                  <button className="text_button text_button--color-blue" onClick={() => setInspectTarget(null)}>Понятно</button>
+                )}
+                <button className="text_button text_button--color-transparent" onClick={() => setInspectTarget(null)}>Закрыть</button>
               </div>
             </div>
           </div>

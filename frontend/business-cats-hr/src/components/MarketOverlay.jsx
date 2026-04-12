@@ -62,7 +62,7 @@ const SEX_LABEL_RU = {
   F: 'девочка',
 }
 const MAX_TRADE_PRICE = 999
-const DEFAULT_ADULT_AGE = 3
+const DEFAULT_ADULT_AGE = 2
 
 const resolveColorLabel = (value) => {
   const normalized = normalizeColor(value)
@@ -106,6 +106,9 @@ const formatTradeRequestError = (value) => {
   if (code === 'ONLY_KITTENS_CAN_BE_TRADED') {
     return 'Продавать можно только котят'
   }
+  if (code === 'SICK_KITTENS_CANNOT_BE_TRADED') {
+    return 'Больных котят нельзя продавать'
+  }
   return String(value ?? '')
 }
 
@@ -117,17 +120,17 @@ const buildTradePriceHint = (item, parsedPrice) => {
     if (parsedPrice <= referencePrice) {
       return { tone: 'good', label: 'Выгодная цена' }
     }
-    if (parsedPrice <= Math.ceil(referencePrice * 1.1)) {
-      return { tone: 'warn', label: 'Возможен торг' }
+    if (parsedPrice <= Math.ceil(referencePrice * 1.15)) {
+      return { tone: 'warn', label: 'Можно поторговаться' }
     }
-    return { tone: 'bad', label: 'Слишком высокая цена' }
+    return { tone: 'bad', label: 'Высокая цена' }
   }
 
   if (parsedPrice >= referencePrice) {
     return { tone: 'good', label: 'Выгодная цена' }
   }
   if (parsedPrice >= Math.floor(referencePrice * 0.9)) {
-    return { tone: 'warn', label: 'Возможен торг' }
+    return { tone: 'warn', label: 'Можно поторговаться' }
   }
   return { tone: 'bad', label: 'Слишком низкая цена' }
 }
@@ -194,6 +197,17 @@ const normalizeInventoryEntities = (inventoryEntities) => {
 
 const isEntityHungry = (entity) =>
   Boolean(entity?.hungry) && entity?.hungry !== 'false' && entity?.hungry !== 0
+
+const isEntitySick = (entity) => {
+  const healthStatus = String(entity?.healthStatus ?? '').trim().toUpperCase()
+  if (healthStatus === 'HEALED') return false
+  if (healthStatus === 'SICK') return true
+  if (typeof entity?.isSick === 'boolean') return entity.isSick
+  const diseaseType = String(entity?.diseaseType ?? entity?.sick ?? '')
+    .trim()
+    .toUpperCase()
+  return ['RINGWORM', 'FLEAS', 'POISONING', 'BROKEN_PAW'].includes(diseaseType)
+}
 
 function CatTile({
   cat,
@@ -423,7 +437,7 @@ export default function MarketOverlay({
       normalizedEntities.filter((entity) => {
         const color = normalizeColor(entity?.color ?? entity?.catType)
         const kitten = resolveKittenStatus(entity, adultAge)
-        return DEFAULT_TYPES.includes(color) && kitten === true
+        return DEFAULT_TYPES.includes(color) && kitten === true && !isEntitySick(entity)
       }),
     [normalizedEntities, adultAge]
   )
@@ -637,6 +651,9 @@ export default function MarketOverlay({
     }
     if (payload?.readyToSell === false) {
       return 'Голодного котёнка нельзя продать: сначала покормите его'
+    }
+    if (isEntitySick(payload)) {
+      return 'Больных котят нельзя продавать'
     }
     return null
   }

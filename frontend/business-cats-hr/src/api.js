@@ -172,6 +172,7 @@ export const api = {
       nurseryCoinsDelta,
     }),
   finishSession: (sessionId) => apiPost('/api/game/session/finish', { sessionId }),
+  gameEvent: (payload) => apiPost('/api/game/event', payload),
   getProgress: (sessionId, seasonNumber) => apiGet(`/api/game/progress/${sessionId}/${seasonNumber}`),
   saveProgress: (payload) => apiPost('/api/game/progress/save', payload),
 
