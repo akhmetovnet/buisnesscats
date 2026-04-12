@@ -130,6 +130,9 @@ export default function SeasonResultModal({ open, result, nextSeason, onConfirm 
               </div>
             ))}
           </div>
+          <div className="modal__desc season-change-modal__desc">
+            Доходы от продажи считаются отдельно, а в расходы входят все траты сезона.
+          </div>
         </div>
       ) : (
         <div className="season-final__empty">

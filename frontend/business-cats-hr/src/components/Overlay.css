@@ -223,6 +223,11 @@
   gap: 6px;
 }
 
+.trade-errors {
+  display: grid;
+  gap: 6px;
+}
+
 .lot-area {
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);

@@ -1545,6 +1545,17 @@ export default function PlayMapPage({ me }) {
     return () => window.removeEventListener('popstate', onPopState)
   }, [navigate, sessionId, season])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const guardState = { ...(window.history.state || {}), bcPlayGuard: true }
+    window.history.pushState(guardState, '', window.location.href)
+    const onPopState = () => {
+      navigate('/competencies', { replace: true })
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [navigate, sessionId, season])
+
   const openOverlay = (type, id) => {
     if (type === 'cattery' && playerRole === 'cattery' && id === YOUR_CATTTERY_ID) {
       setNurseryOpen(true)
@@ -2293,6 +2304,22 @@ export default function PlayMapPage({ me }) {
         onClose={handleWelcomeClose}
         playerName="Леопольд"
         startCoins={Math.max(0, Number(state?.coinsNowEstimate ?? 1000) || 1000)}
+      />
+
+      <RequestsSidebar requests={visibleTradeRequests} onOpenRequest={handleOpenRequest} />
+
+      <RequestModal
+        open={Boolean(activeSessionRequest)}
+        request={activeSessionRequest}
+        busy={tradeRequestsBusy}
+        onClose={() => setActiveRequest(null)}
+        onAction={handleRequestAction}
+      />
+
+      <TradeSendModal
+        open={Boolean(activeTradeSendRequest)}
+        request={activeTradeSendRequest}
+        onClose={() => setTradeSendModalRequest(null)}
       />
 
       <RequestsSidebar requests={visibleTradeRequests} onOpenRequest={handleOpenRequest} />
