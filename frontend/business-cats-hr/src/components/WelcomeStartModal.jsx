@@ -18,7 +18,7 @@ export default function WelcomeStartModal({
   open,
   onClose,
   playerName = 'Леопольд',
-  startCoins = 1000,
+  startCoins = 40,
 }) {
   const steps = [
     {

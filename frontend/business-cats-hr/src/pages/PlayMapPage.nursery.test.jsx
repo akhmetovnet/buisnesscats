@@ -21,6 +21,72 @@ const createBreedingNursery = () => ({
 })
 
 describe('PlayMapPage nursery disease flow', () => {
+  it('migrates legacy single-home nursery into homes array', () => {
+    const nursery = normalizeNurseryState({
+      coins: 10,
+      hasHome: true,
+      insuranceActive: true,
+      insuranceNext: false,
+      cats: [{ id: 'old-parent', color: 'white', sex: 'F', age: 3 }],
+      home: {
+        parents: { left: ['old-parent', null], right: [null, null] },
+        kittens: [{ id: 'legacy-kitten', color: 'black', sex: 'M', age: 0 }],
+        breedPending: { left: false, right: false },
+        lastBreedSeason: { left: 0, right: 0 },
+      },
+    }, 2)
+
+    expect(nursery.homes).toHaveLength(1)
+    expect(nursery.activeHomeIndex).toBe(0)
+    expect(nursery.homes[0].insuranceActive).toBe(true)
+    expect(nursery.homes[0].parents.left[0]).toBe('old-parent')
+    expect(nursery.homes[0].kittens[0].id).toBe('legacy-kitten')
+    expect(nursery.home.kittens[0].id).toBe('legacy-kitten')
+  })
+
+  it('preserves multi-home saves and restores active home mirror on reload', () => {
+    const nursery = normalizeNurseryState({
+      coins: 18,
+      cats: [{ id: 'yard-adult', color: 'white', sex: 'F', age: 3 }],
+      homes: [
+        {
+          id: 'home-1',
+          number: 1,
+          insuranceActive: true,
+          insuranceNext: false,
+          parents: { left: ['yard-adult', null], right: [null, null] },
+          kittens: Array(12).fill(null),
+          breedPending: { left: false, right: false },
+          lastBreedSeason: { left: 0, right: 0 },
+        },
+        {
+          id: 'home-2',
+          number: 2,
+          insuranceActive: false,
+          insuranceNext: true,
+          parents: { left: [null, null], right: [null, null] },
+          kittens: [
+            { id: 'kitten-home-2', color: 'black', sex: 'M', age: 0 },
+            ...Array(11).fill(null),
+          ],
+          breedPending: { left: true, right: false },
+          lastBreedSeason: { left: 2, right: 0 },
+        },
+      ],
+      activeHomeIndex: 1,
+    }, 2)
+
+    expect(nursery.homes).toHaveLength(2)
+    expect(nursery.activeHomeIndex).toBe(1)
+    expect(nursery.home.id).toBe('home-2')
+    expect(nursery.home.number).toBe(2)
+    expect(nursery.home.insuranceNext).toBe(true)
+    expect(nursery.home.kittens[0].id).toBe('kitten-home-2')
+    expect(nursery.hasHome).toBe(true)
+    expect(nursery.insuranceActive).toBe(false)
+    expect(nursery.insuranceNext).toBe(true)
+  })
+
   it('normalizes disease defaults for old nursery_json', () => {
     const cat = normalizeNurseryCat({ id: 'old-1', color: 'gray', sex: 'M', age: 0 }, { adultAge: 2 })
     expect(cat).toMatchObject({
@@ -121,5 +187,63 @@ describe('PlayMapPage nursery disease flow', () => {
       healthStatus: 'HEALED',
     })
     expect(result.escapedSickKittens).toHaveLength(0)
+  })
+
+  it('processes all homes during season transition', () => {
+    const result = buildSeasonTransition({
+      coins: 20,
+      cats: [
+        { id: 'mom-1', color: 'white', sex: 'F', age: 3, isKitten: false, hungry: false, fedThisSeason: true },
+        { id: 'dad-1', color: 'black', sex: 'M', age: 3, isKitten: false, hungry: false, fedThisSeason: true },
+        { id: 'mom-2', color: 'gray', sex: 'F', age: 3, isKitten: false, hungry: false, fedThisSeason: true },
+        { id: 'dad-2', color: 'ginger', sex: 'M', age: 3, isKitten: false, hungry: false, fedThisSeason: true },
+      ],
+      homes: [
+        {
+          id: 'home-1',
+          number: 1,
+          insuranceActive: false,
+          insuranceNext: true,
+          parents: { left: ['mom-1', 'dad-1'], right: [null, null] },
+          kittens: Array(12).fill(null),
+          breedPending: { left: true, right: false },
+          lastBreedSeason: { left: 1, right: 0 },
+        },
+        {
+          id: 'home-2',
+          number: 2,
+          insuranceActive: false,
+          insuranceNext: false,
+          parents: { left: ['mom-2', 'dad-2'], right: [null, null] },
+          kittens: [
+            {
+              id: 'sick-home-2',
+              color: 'gray',
+              sex: 'M',
+              age: 0,
+              isKitten: true,
+              isSick: true,
+              diseaseType: 'FLEAS',
+              healthStatus: 'SICK',
+            },
+            ...Array(11).fill(null),
+          ],
+          breedPending: { left: false, right: false },
+          lastBreedSeason: { left: 0, right: 0 },
+        },
+      ],
+      activeHomeIndex: 1,
+    }, 2, { rng: () => 0 })
+
+    expect(result.nursery.homes).toHaveLength(2)
+    expect(result.nursery.activeHomeIndex).toBe(1)
+    expect(result.nursery.homes[0].insuranceActive).toBe(true)
+    expect(result.nursery.homes[0].insuranceNext).toBe(false)
+    expect(result.nursery.homes[0].kittens.filter(Boolean).length).toBeGreaterThan(0)
+    expect(result.nursery.homes[1].kittens.filter(Boolean)).toHaveLength(0)
+    expect(result.escapedSickKittens[0]).toMatchObject({
+      id: 'sick-home-2',
+      escapeReason: 'SICK_UNTREATED',
+    })
   })
 })

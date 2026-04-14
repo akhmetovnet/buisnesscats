@@ -9,6 +9,7 @@ describe('MyNurseryOverlay disease helpers', () => {
 
   it('marks treated kitten as healed in cats and home kittens', () => {
     const nursery = {
+      activeHomeIndex: 1,
       cats: [
         {
           id: 'yard-kitten',
@@ -31,14 +32,46 @@ describe('MyNurseryOverlay disease helpers', () => {
           },
         ],
       },
+      homes: [
+        {
+          id: 'home-1',
+          number: 1,
+          parents: { left: [null, null], right: [null, null] },
+          kittens: [null],
+          breedPending: { left: false, right: false },
+          lastBreedSeason: { left: 0, right: 0 },
+        },
+        {
+          id: 'home-2',
+          number: 2,
+          insuranceActive: true,
+          parents: { left: [null, null], right: [null, null] },
+          kittens: [
+            {
+              id: 'home-kitten',
+              age: 0,
+              isKitten: true,
+              isSick: true,
+              diseaseType: 'RINGWORM',
+              healthStatus: 'SICK',
+            },
+          ],
+          breedPending: { left: false, right: false },
+          lastBreedSeason: { left: 0, right: 0 },
+        },
+      ],
     }
 
     const treatedHome = applyKittenTreatment(nursery, 'home-kitten', 3)
-    expect(treatedHome.home.kittens[0]).toMatchObject({
+    expect(treatedHome.homes[1].kittens[0]).toMatchObject({
       isSick: false,
       diseaseType: null,
       healthStatus: 'HEALED',
       healedAtSeason: 3,
+    })
+    expect(treatedHome.home.kittens[0]).toMatchObject({
+      id: 'home-kitten',
+      healthStatus: 'HEALED',
     })
 
     const treatedYard = applyKittenTreatment(nursery, 'yard-kitten', 4)

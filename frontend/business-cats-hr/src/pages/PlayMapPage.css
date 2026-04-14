@@ -149,18 +149,6 @@
   filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.35));
 }
 
-.mapBadge {
-  display: inline-block;
-  margin-top: 4px;
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-caption);
-  font-weight: var(--font-weight-medium);
-  color: #e8edf8;
-  background: rgba(10, 14, 24, 0.6);
-  padding: 2px 6px;
-  border-radius: 6px;
-}
-
 .yourCattery img {
   width: 170px;
 }
@@ -249,10 +237,6 @@
 
   .yourCattery img {
     width: 150px;
-  }
-
-  .mapBadge {
-    font-size: 10px;
   }
 
   .mapTree {

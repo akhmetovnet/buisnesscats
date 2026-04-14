@@ -205,6 +205,47 @@
   height: 100%;
 }
 
+.own-nurseries__carousel {
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  transform: translateX(-50%);
+  z-index: 9;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 8px 18px rgba(72, 72, 60, 0.18);
+}
+
+.own-nurseries__carousel-btn {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #44a85a, #2f8f51);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.own-nurseries__carousel-btn:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.own-nurseries__carousel-indicator {
+  min-width: 116px;
+  text-align: center;
+  font-size: var(--font-size-body-small);
+  line-height: var(--line-height-body-small);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary-blue-dark);
+}
+
 .own-nurseries__cats {
   width: 100%;
 }

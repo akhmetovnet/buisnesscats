@@ -204,8 +204,79 @@ const isCatSick = (cat) => getDiseaseState(cat).isSick
 
 export const getTreatmentCost = (insuranceActive) => (insuranceActive ? 0 : TREAT_COST)
 
+const createEmptyHome = (number = 1) => ({
+  id: `home-${Math.max(1, Number(number) || 1)}`,
+  number: Math.max(1, Number(number) || 1),
+  insuranceActive: false,
+  insuranceNext: false,
+  parents: { left: [null, null], right: [null, null] },
+  kittens: Array(12).fill(null),
+  breedPending: { left: false, right: false },
+  lastBreedSeason: { left: 0, right: 0 },
+})
+
+const clampHomeIndex = (value, totalHomes) => {
+  const count = Math.max(0, Number(totalHomes) || 0)
+  if (count <= 0) return 0
+  const normalized = Number(value)
+  if (!Number.isFinite(normalized)) return 0
+  return Math.min(count - 1, Math.max(0, Math.floor(normalized)))
+}
+
+const syncNurseryWithHomes = (nursery) => {
+  const source = nursery && typeof nursery === 'object' ? nursery : {}
+  const sourceHomes =
+    Array.isArray(source.homes) && source.homes.length
+      ? source.homes
+      : Boolean(source.hasHome || source.home || source.insuranceActive || source.insuranceNext)
+        ? [
+            {
+              ...(source.home && typeof source.home === 'object' ? source.home : {}),
+              id: 'home-1',
+              number: 1,
+              insuranceActive: Boolean(source.insuranceActive),
+              insuranceNext: Boolean(source.insuranceNext),
+            },
+          ]
+        : []
+
+  const homes = sourceHomes.map((home, index) => ({
+    ...createEmptyHome(index + 1),
+    ...(home && typeof home === 'object' ? home : {}),
+    id: String(home?.id || `home-${index + 1}`),
+    number: Math.max(1, Number(home?.number || index + 1) || index + 1),
+    insuranceActive: Boolean(home?.insuranceActive),
+    insuranceNext: Boolean(home?.insuranceNext),
+    parents: {
+      left: Array.isArray(home?.parents?.left) ? [home.parents.left[0] ?? null, home.parents.left[1] ?? null] : [null, null],
+      right: Array.isArray(home?.parents?.right) ? [home.parents.right[0] ?? null, home.parents.right[1] ?? null] : [null, null],
+    },
+    kittens: Array.from({ length: 12 }, (_, idx) => home?.kittens?.[idx] ?? null),
+    breedPending: {
+      left: Boolean(home?.breedPending?.left),
+      right: Boolean(home?.breedPending?.right),
+    },
+    lastBreedSeason: {
+      left: Number(home?.lastBreedSeason?.left) || 0,
+      right: Number(home?.lastBreedSeason?.right) || 0,
+    },
+  }))
+  const activeHomeIndex = clampHomeIndex(source.activeHomeIndex, homes.length)
+  const activeHome = homes[activeHomeIndex] ? { ...homes[activeHomeIndex] } : createEmptyHome(1)
+  return {
+    ...source,
+    homes,
+    activeHomeIndex,
+    hasHome: homes.length > 0,
+    home: activeHome,
+    insuranceActive: homes.length > 0 ? Boolean(activeHome.insuranceActive) : false,
+    insuranceNext: homes.length > 0 ? Boolean(activeHome.insuranceNext) : false,
+  }
+}
+
 export const applyKittenTreatment = (nursery, catId, currentSeason) => {
   const nextSeason = Math.max(0, Number(currentSeason) || 0)
+  const normalizedNursery = syncNurseryWithHomes(nursery)
   const applyTreatment = (cat) => {
     if (!cat || String(cat?.id ?? '') !== String(catId)) return cat
     return {
@@ -218,14 +289,14 @@ export const applyKittenTreatment = (nursery, catId, currentSeason) => {
     }
   }
 
-  return {
-    ...nursery,
-    cats: (nursery?.cats || []).map(applyTreatment),
-    home: {
-      ...nursery?.home,
-      kittens: (nursery?.home?.kittens || []).map((cat) => (cat ? applyTreatment(cat) : cat)),
-    },
-  }
+  return syncNurseryWithHomes({
+    ...normalizedNursery,
+    cats: (normalizedNursery?.cats || []).map(applyTreatment),
+    homes: (normalizedNursery?.homes || []).map((home) => ({
+      ...home,
+      kittens: (home?.kittens || []).map((cat) => (cat ? applyTreatment(cat) : cat)),
+    })),
+  })
 }
 
 export default function MyNurseryOverlay({
@@ -248,6 +319,31 @@ export default function MyNurseryOverlay({
   const [modal, setModal] = useState(null)
   const [feedQueue, setFeedQueue] = useState([])
   const [inspectTarget, setInspectTarget] = useState(null)
+  const nurseryState = useMemo(() => syncNurseryWithHomes(nursery), [nursery])
+  const updateNursery = useCallback(
+    (updater) => {
+      setNursery((prev) => {
+        const normalizedPrev = syncNurseryWithHomes(prev)
+        const nextValue = typeof updater === 'function' ? updater(normalizedPrev) : updater
+        return syncNurseryWithHomes(nextValue)
+      })
+    },
+    [setNursery]
+  )
+  const updateActiveHome = useCallback(
+    (updater) => {
+      updateNursery((prev) => {
+        const nextHomes = [...(prev?.homes || [])]
+        const activeIndex = clampHomeIndex(prev?.activeHomeIndex, nextHomes.length)
+        nextHomes[activeIndex] = updater({ ...(nextHomes[activeIndex] || createEmptyHome(activeIndex + 1)) })
+        return {
+          ...prev,
+          homes: nextHomes,
+        }
+      })
+    },
+    [updateNursery]
+  )
   const logNurseryEvent = useCallback(
     async (eventType, payload = {}) => {
       if (!sessionId || !eventType) return
@@ -266,18 +362,18 @@ export default function MyNurseryOverlay({
   )
 
   useEffect(() => {
-    setNursery((prev) => {
-      const homeSlots = Array.isArray(prev?.home?.kittens) ? prev.home.kittens : []
-      if (!homeSlots.length) return prev
-
+    updateNursery((prev) => {
       const movedToYard = []
-      const nextHomeSlots = homeSlots.map((cat) => {
-        if (!cat) return null
-        const id = String(cat?.id ?? '')
-        if (id.startsWith('born-')) return cat
-        movedToYard.push(cat)
-        return null
-      })
+      const nextHomes = (prev?.homes || []).map((home) => ({
+        ...home,
+        kittens: (home?.kittens || []).map((cat) => {
+          if (!cat) return null
+          const id = String(cat?.id ?? '')
+          if (id.startsWith('born-')) return cat
+          movedToYard.push(cat)
+          return null
+        }),
+      }))
 
       if (!movedToYard.length) return prev
 
@@ -292,35 +388,36 @@ export default function MyNurseryOverlay({
       return {
         ...prev,
         cats: [...existingCats, ...appended],
-        home: {
-          ...prev.home,
-          kittens: nextHomeSlots,
-        },
+        homes: nextHomes,
       }
     })
-  }, [setNursery])
+  }, [updateNursery])
 
-  const cats = Array.isArray(nursery?.cats) ? nursery.cats : []
-  const hasHome = nursery?.hasHome
-  const playerName = nursery?.playerName || 'ЛЕОПОЛЬД'
+  const cats = Array.isArray(nurseryState?.cats) ? nurseryState.cats : []
+  const homes = Array.isArray(nurseryState?.homes) ? nurseryState.homes : []
+  const hasHome = homes.length > 0
+  const activeHomeIndex = clampHomeIndex(nurseryState?.activeHomeIndex, homes.length)
+  const activeHome = homes[activeHomeIndex] || createEmptyHome(1)
+  const playerName = nurseryState?.playerName || 'ЛЕОПОЛЬД'
   const coins = Number.isFinite(Number(coinsNow))
     ? Number(coinsNow)
-    : Number(nursery?.coins ?? 0)
+    : Number(nurseryState?.coins ?? 0)
 
   const assignedIds = useMemo(() => {
     const ids = new Set()
-    if (!nursery?.home) return ids
-    nursery.home.parents.left.forEach((id) => id && ids.add(id))
-    nursery.home.parents.right.forEach((id) => id && ids.add(id))
+    homes.forEach((home) => {
+      home?.parents?.left?.forEach((id) => id && ids.add(id))
+      home?.parents?.right?.forEach((id) => id && ids.add(id))
+    })
     return ids
-  }, [nursery])
+  }, [homes])
   const homeWindowKittens = useMemo(
-    () => Array.from({ length: 12 }, (_, idx) => nursery?.home?.kittens?.[idx] || null),
-    [nursery?.home?.kittens]
+    () => Array.from({ length: 12 }, (_, idx) => activeHome?.kittens?.[idx] || null),
+    [activeHome?.kittens]
   )
   const homeKittens = useMemo(
-    () => (nursery?.home?.kittens || []).filter(Boolean),
-    [nursery?.home?.kittens]
+    () => (activeHome?.kittens || []).filter(Boolean),
+    [activeHome?.kittens]
   )
   const catsById = useMemo(
     () => Object.fromEntries([...cats, ...homeKittens].map((cat) => [cat.id, cat])),
@@ -334,11 +431,11 @@ export default function MyNurseryOverlay({
   const yardCats = cats.filter((cat) => !assignedIds.has(cat.id))
   const hasMotherOnSide = useCallback(
     (side) =>
-      (nursery?.home?.parents?.[side] || []).some((catId) => {
+      (activeHome?.parents?.[side] || []).some((catId) => {
         const cat = catId ? catsById[catId] : null
         return cat?.sex === 'F'
       }),
-    [nursery?.home?.parents, catsById]
+    [activeHome?.parents, catsById]
   )
   const isProtectedKittenSlot = useCallback(
     (slotIndex) => {
@@ -352,12 +449,12 @@ export default function MyNurseryOverlay({
       ['left', 'right'].flatMap((side) =>
         [0, 1]
           .map((idx) => {
-            const catId = nursery?.home?.parents?.[side]?.[idx]
+            const catId = activeHome?.parents?.[side]?.[idx]
             return catId ? catsById[catId] : null
           })
           .filter((cat) => cat && cat.hungry && !cat.fedThisSeason)
       ),
-    [nursery?.home?.parents, catsById]
+    [activeHome?.parents, catsById]
   )
   const kittenQueueTargets = useMemo(
     () =>
@@ -386,7 +483,7 @@ export default function MyNurseryOverlay({
   }, [homeWindowKittens, assignedIds])
   const syncCoins = (nextCoins) => {
     const normalized = Math.max(0, Number(nextCoins) || 0)
-    setNursery((prev) => ({ ...prev, coins: normalized }))
+    updateNursery((prev) => ({ ...prev, coins: normalized }))
     if (typeof onCoinsSync === 'function') onCoinsSync(normalized)
   }
 
@@ -414,10 +511,6 @@ export default function MyNurseryOverlay({
   }
 
   const handleBuyHome = () => {
-    if (hasHome) {
-      setModal({ type: 'info', title: 'Домик уже куплен' })
-      return
-    }
     if (coins < HOME_COST) {
       openNotEnoughCoinsModal(HOME_COST)
       return
@@ -431,10 +524,16 @@ export default function MyNurseryOverlay({
       return
     }
     recordSeasonSpend('home', HOME_COST)
-    setNursery((prev) => ({
-      ...prev,
-      hasHome: true,
-    }))
+    updateNursery((prev) => {
+      const nextHomes = [...(prev?.homes || [])]
+      const nextNumber = nextHomes.length + 1
+      nextHomes.push(createEmptyHome(nextNumber))
+      return {
+        ...prev,
+        homes: nextHomes,
+        activeHomeIndex: nextHomes.length - 1,
+      }
+    })
     setModal(null)
   }
 
@@ -477,19 +576,19 @@ export default function MyNurseryOverlay({
     }
     recordSeasonSpend('feed', FEED_COST)
     const afterFeedCoins = coins - FEED_COST
-    setNursery((prev) => ({
+    updateNursery((prev) => ({
       ...prev,
       cats: prev.cats.map((c) =>
         c.id === cat.id
           ? { ...c, hungry: false, fedThisSeason: true }
           : c
       ),
-      home: {
-        ...prev.home,
-        kittens: prev.home.kittens.map((k) =>
+      homes: (prev?.homes || []).map((home) => ({
+        ...home,
+        kittens: (home?.kittens || []).map((k) =>
           k?.id === cat.id ? { ...k, hungry: false, fedThisSeason: true } : k
         ),
-      },
+      })),
     }))
     setModal(null)
     if (feedQueue.length) {
@@ -543,7 +642,7 @@ export default function MyNurseryOverlay({
       setModal({ type: 'info', title: 'Лечение не требуется' })
       return
     }
-    const treatmentCost = getTreatmentCost(Boolean(nursery?.insuranceActive))
+    const treatmentCost = getTreatmentCost(Boolean(activeHome?.insuranceActive))
     if (treatmentCost > 0 && coins < treatmentCost) {
       openNotEnoughCoinsModal(treatmentCost)
       return
@@ -555,7 +654,7 @@ export default function MyNurseryOverlay({
       }
       recordSeasonSpend('treatment', treatmentCost)
     }
-    setNursery((prev) => applyKittenTreatment(prev, cat.id, seasonNumber))
+    updateNursery((prev) => applyKittenTreatment(prev, cat.id, seasonNumber))
     setInspectTarget(null)
     setModal({
       type: 'info',
@@ -579,8 +678,8 @@ export default function MyNurseryOverlay({
       return
     }
     recordSeasonSpend('insurance', INSURANCE_COST)
-    setNursery((prev) => ({
-      ...prev,
+    updateActiveHome((home) => ({
+      ...home,
       insuranceNext: true,
     }))
     setModal(null)
@@ -593,13 +692,13 @@ export default function MyNurseryOverlay({
     }
     const cat = cats.find((c) => c.id === catId)
     if (!cat) return
-    if (cat.locked || nursery?.home?.breedPending?.left || nursery?.home?.breedPending?.right) {
+    if (cat.locked || activeHome?.breedPending?.left || activeHome?.breedPending?.right) {
       setModal({ type: 'error', title: 'Во время скрещивания котиков перемещать нельзя' })
       return
     }
-    setNursery((prev) => {
-      const left = [...prev.home.parents.left]
-      const right = [...prev.home.parents.right]
+    updateActiveHome((home) => {
+      const left = [...(home?.parents?.left || [null, null])]
+      const right = [...(home?.parents?.right || [null, null])]
       const clearId = (id) => (id === catId ? null : id)
       const nextParents = {
         left: left.map(clearId),
@@ -607,35 +706,29 @@ export default function MyNurseryOverlay({
       }
       nextParents[side][index] = catId
       return {
-        ...prev,
-        home: {
-          ...prev.home,
-          parents: nextParents,
-        },
+        ...home,
+        parents: nextParents,
       }
     })
   }
 
   const handleRemoveParent = (side, index) => {
-    const catId = nursery?.home?.parents?.[side]?.[index]
+    const catId = activeHome?.parents?.[side]?.[index]
     if (!catId) return
     const cat = catsById[catId]
-    if (cat?.locked || nursery?.home?.breedPending?.left || nursery?.home?.breedPending?.right) {
+    if (cat?.locked || activeHome?.breedPending?.left || activeHome?.breedPending?.right) {
       setModal({ type: 'error', title: 'Во время скрещивания котиков перемещать нельзя' })
       return
     }
-    setNursery((prev) => {
+    updateActiveHome((home) => {
       const nextParents = {
-        left: [...prev.home.parents.left],
-        right: [...prev.home.parents.right],
+        left: [...(home?.parents?.left || [null, null])],
+        right: [...(home?.parents?.right || [null, null])],
       }
       nextParents[side][index] = null
       return {
-        ...prev,
-        home: {
-          ...prev.home,
-          parents: nextParents,
-        },
+        ...home,
+        parents: nextParents,
       }
     })
   }
@@ -645,7 +738,7 @@ export default function MyNurseryOverlay({
       setModal({ type: 'error', title: 'Нет домика' })
       return
     }
-    const pair = nursery.home.parents[side]
+    const pair = activeHome.parents[side]
     const catA = catsById[pair[0]]
     const catB = catsById[pair[1]]
     if (!catA || !catB) {
@@ -664,11 +757,11 @@ export default function MyNurseryOverlay({
       setModal({ type: 'error', title: 'Сначала покормите котиков' })
       return
     }
-    if (nursery.home.breedPending[side]) {
+    if (activeHome.breedPending[side]) {
       setModal({ type: 'error', title: 'Скрещивание уже запущено' })
       return
     }
-    if (nursery.home.lastBreedSeason[side] === seasonNumber - 1) {
+    if (activeHome.lastBreedSeason[side] === seasonNumber - 1) {
       setModal({ type: 'error', title: 'Нужен перерыв 1 сезон' })
       return
     }
@@ -678,13 +771,17 @@ export default function MyNurseryOverlay({
       setModal({ type: 'error', title: 'Скрещивание невозможно: рядом с родителями сидят котята' })
       return
     }
-    setNursery((prev) => ({
+    updateNursery((prev) => ({
       ...prev,
-      home: {
-        ...prev.home,
-        breedPending: { ...prev.home.breedPending, [side]: true },
-        lastBreedSeason: { ...prev.home.lastBreedSeason, [side]: seasonNumber },
-      },
+      homes: (prev?.homes || []).map((home, index) =>
+        index !== activeHomeIndex
+          ? home
+          : {
+              ...home,
+              breedPending: { ...home.breedPending, [side]: true },
+              lastBreedSeason: { ...home.lastBreedSeason, [side]: seasonNumber },
+            }
+      ),
       cats: prev.cats.map((c) =>
         c.id === catA.id || c.id === catB.id ? { ...c, locked: true } : c
       ),
@@ -695,44 +792,47 @@ export default function MyNurseryOverlay({
   const canBreedOnSide = useCallback(
     (side) => {
       if (!hasHome) return false
-      const pair = nursery?.home?.parents?.[side] || []
+      const pair = activeHome?.parents?.[side] || []
       const catA = pair[0] ? catsById[pair[0]] : null
       const catB = pair[1] ? catsById[pair[1]] : null
       if (!catA || !catB) return false
       if (catA.sex === catB.sex) return false
       if (catA.age < adultAge || catB.age < adultAge) return false
       if (catA.hungry || catB.hungry) return false
-      if (nursery?.home?.breedPending?.[side]) return false
-      if (nursery?.home?.lastBreedSeason?.[side] === seasonNumber - 1) return false
+      if (activeHome?.breedPending?.[side]) return false
+      if (activeHome?.lastBreedSeason?.[side] === seasonNumber - 1) return false
       const sideSlots = side === 'left' ? [0, 1, 2, 3, 4, 5] : [6, 7, 8, 9, 10, 11]
       return !sideSlots.some((idx) => Boolean(homeWindowKittens?.[idx]))
     },
-    [hasHome, nursery?.home, catsById, seasonNumber, homeWindowKittens]
+    [hasHome, activeHome, catsById, seasonNumber, homeWindowKittens]
   )
 
   const moveKittenToYard = (side, idx) => {
     const slotIndex = side === 'left' ? idx : idx + 6
-    const kitten = nursery?.home?.kittens?.[slotIndex]
+    const kitten = activeHome?.kittens?.[slotIndex]
     if (!kitten) return
-    if (nursery?.home?.breedPending?.left || nursery?.home?.breedPending?.right) {
+    if (activeHome?.breedPending?.left || activeHome?.breedPending?.right) {
       setModal({ type: 'error', title: 'Во время скрещивания котиков перемещать нельзя' })
       return
     }
-    setNursery((prev) => {
-      const nextKittens = [...(prev?.home?.kittens || [])]
+    updateNursery((prev) => {
+      const nextHomes = [...(prev?.homes || [])]
+      const home = { ...(nextHomes[activeHomeIndex] || createEmptyHome(activeHomeIndex + 1)) }
+      const nextKittens = [...(home?.kittens || [])]
       const current = nextKittens[slotIndex]
       if (!current) return prev
       nextKittens[slotIndex] = null
       const already = (prev?.cats || []).some((cat) => cat.id === current.id)
+      nextHomes[activeHomeIndex] = {
+        ...home,
+        kittens: nextKittens,
+      }
       return {
         ...prev,
         cats: already
           ? prev.cats
           : [...(prev.cats || []), { ...current, hungry: true, fedThisSeason: false }],
-        home: {
-          ...prev.home,
-          kittens: nextKittens,
-        },
+        homes: nextHomes,
       }
     })
   }
@@ -788,6 +888,23 @@ export default function MyNurseryOverlay({
       return
     }
     onClose()
+  }
+
+  const canGoPrevHome = activeHomeIndex > 0
+  const canGoNextHome = activeHomeIndex < homes.length - 1
+  const handlePrevHome = () => {
+    if (!canGoPrevHome) return
+    updateNursery((prev) => ({
+      ...prev,
+      activeHomeIndex: Math.max(0, clampHomeIndex(prev?.activeHomeIndex, homes.length) - 1),
+    }))
+  }
+  const handleNextHome = () => {
+    if (!canGoNextHome) return
+    updateNursery((prev) => ({
+      ...prev,
+      activeHomeIndex: Math.min(homes.length - 1, clampHomeIndex(prev?.activeHomeIndex, homes.length) + 1),
+    }))
   }
 
   if (!open) return null
@@ -878,9 +995,32 @@ export default function MyNurseryOverlay({
           <div className="nursery__scene">
           {hasHome ? (
             <>
+              <div className="own-nurseries__carousel">
+                <button
+                  className="own-nurseries__carousel-btn"
+                  type="button"
+                  onClick={handlePrevHome}
+                  disabled={!canGoPrevHome}
+                  aria-label="Предыдущий домик"
+                >
+                  ←
+                </button>
+                <div className="own-nurseries__carousel-indicator">
+                  Домик <span className="notranslate">{activeHomeIndex + 1}</span> / <span className="notranslate">{homes.length}</span>
+                </div>
+                <button
+                  className="own-nurseries__carousel-btn"
+                  type="button"
+                  onClick={handleNextHome}
+                  disabled={!canGoNextHome}
+                  aria-label="Следующий домик"
+                >
+                  →
+                </button>
+              </div>
               <div className="nursery__house">
                 <img src="/assets/nurseruhome.png" alt="home" />
-                {nursery.insuranceActive || nursery.insuranceNext ? (
+                {activeHome?.insuranceActive || activeHome?.insuranceNext ? (
                   <span className="insurance-badge">
                     <img src="/assets/cats/zastrachovano-domik.png" alt="insured house" />
                   </span>
@@ -888,7 +1028,7 @@ export default function MyNurseryOverlay({
                 <div className="own-nurseries__houses-item own-nurseries__houses-item--single-house">
                   <div className="own-nurseries__houses-tablet">
                     <div className="own-nurseries__houses-number_box">
-                      <div className="own-nurseries__houses-number">1</div>
+                      <div className="own-nurseries__houses-number">{activeHome.number}</div>
                     </div>
                   </div>
                   <div className="own-nurseries__nursery-box nursery-box">
@@ -897,7 +1037,7 @@ export default function MyNurseryOverlay({
                         <div className="nursery-box__old-cats">
                           <div className="nursery-box__old-cats-window">
                             {[0, 1].map((i) => {
-                              const catId = nursery.home.parents[side][i]
+                              const catId = activeHome.parents[side][i]
                               const cat = catId ? catsById[catId] : null
                               return (
                                 <div
@@ -1239,9 +1379,9 @@ export default function MyNurseryOverlay({
                     {getDiseaseState(inspectTarget).isSick ? (
                       <>
                         <div>Диагноз: {DISEASE_LABEL[getDiseaseState(inspectTarget).diseaseType] || 'неизвестно'}</div>
-                        <div>Стоимость лечения: {getTreatmentCost(Boolean(nursery?.insuranceActive))}</div>
+                        <div>Стоимость лечения: {getTreatmentCost(Boolean(activeHome?.insuranceActive))}</div>
                         <div>
-                          {nursery?.insuranceActive ? 'Покрывается страховкой' : 'Страховка не покрывает лечение'}
+                          {activeHome?.insuranceActive ? 'Покрывается страховкой' : 'Страховка не покрывает лечение'}
                         </div>
                       </>
                     ) : null}

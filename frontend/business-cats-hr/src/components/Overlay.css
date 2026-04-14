@@ -247,14 +247,14 @@
 
 .lot-area--shop {
   background: rgba(255, 255, 255, 0.86);
-  min-height: 220px;
+  min-height: 236px;
   display: grid;
   grid-template-columns: 184px minmax(0, 1fr);
 }
 
 .lot-area--nursery {
   background: rgba(255, 255, 255, 0.82);
-  min-height: 220px;
+  min-height: 236px;
   display: grid;
   grid-template-columns: 184px minmax(0, 1fr);
 }
@@ -310,6 +310,7 @@
 .lot-area__content {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   overflow: hidden;
   max-width: 100%;
@@ -318,13 +319,18 @@
 .lot-area__cats {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   width: 100%;
   display: grid;
   grid-template-columns: repeat(8, minmax(0, calc((100% - 42px) / 8)));
+  grid-auto-rows: minmax(182px, auto);
   gap: 6px;
-  overflow: hidden;
-  align-items: stretch;
+  overflow-x: hidden;
+  overflow-y: auto;
+  align-items: start;
+  align-content: start;
   padding: 1px;
+  padding-right: 6px;
   max-width: 100%;
 }
 

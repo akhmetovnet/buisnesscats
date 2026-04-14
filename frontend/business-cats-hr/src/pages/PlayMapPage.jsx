@@ -297,20 +297,24 @@ export const buildSeasonTransition = (
   adultAge = DEFAULT_ADULT_AGE,
   { rng = Math.random } = {}
 ) => {
-  const prev = prevNursery && typeof prevNursery === 'object' ? prevNursery : createDefaultNursery()
+  const prev = normalizeNurseryState(prevNursery, adultAge)
+  const prevHomes = Array.isArray(prev?.homes) ? prev.homes : []
   const persistedEscapedIds = new Set(
     (Array.isArray(prev?.escapedCatIds) ? prev.escapedCatIds : [])
       .map((id) => (id == null ? null : String(id)))
       .filter(Boolean)
   )
   const homeParentIds = new Set(
-    ['left', 'right']
-      .flatMap((side) => (Array.isArray(prev?.home?.parents?.[side]) ? prev.home.parents[side] : []))
+    prevHomes
+      .flatMap((home) =>
+        ['left', 'right'].flatMap((side) => (Array.isArray(home?.parents?.[side]) ? home.parents[side] : []))
+      )
       .map((id) => (id == null ? null : String(id)))
       .filter(Boolean)
   )
   const homeKittenIds = new Set(
-    (Array.isArray(prev?.home?.kittens) ? prev.home.kittens : [])
+    prevHomes
+      .flatMap((home) => (Array.isArray(home?.kittens) ? home.kittens : []))
       .filter(Boolean)
       .map((cat) => (cat?.id == null ? null : String(cat.id)))
       .filter(Boolean)
@@ -327,10 +331,11 @@ export const buildSeasonTransition = (
   }
 
   const prevCats = Array.isArray(prev?.cats) ? prev.cats : []
-  const prevKittens = Array.isArray(prev?.home?.kittens) ? prev.home.kittens : []
   prevCats.forEach(markEscaped)
-  if (!prev.hasHome) {
-    prevKittens.forEach((cat) => cat && markEscaped(cat))
+  if (!prevHomes.length) {
+    prevHomes
+      .flatMap((home) => (Array.isArray(home?.kittens) ? home.kittens : []))
+      .forEach((cat) => cat && markEscaped(cat))
   }
 
   const escapedIds = new Set(escapedById.keys())
@@ -338,65 +343,25 @@ export const buildSeasonTransition = (
   const escapedCatIds = Array.from(escapedCatIdsSet)
   let coins = Math.max(0, Number(prev.coins ?? 0) - 3)
 
-  if (!prev.hasHome) {
+  if (!prevHomes.length) {
     return {
-      nursery: {
+      nursery: withNurseryHomeMirrors({
         ...prev,
         coins,
         cats: [],
-        home: {
-          ...prev.home,
-          parents: { left: [null, null], right: [null, null] },
-          kittens: Array(12).fill(null),
-          breedPending: { left: false, right: false },
-        },
+        homes: [],
+        activeHomeIndex: 0,
         escapedCatIds,
-        insuranceActive: prev.insuranceNext,
-        insuranceNext: false,
-      },
+      }),
       escapedHungryCats: Array.from(escapedById.values()),
       escapedSickKittens: [],
       bornSickKittens: [],
     }
   }
 
-  const normalizeParentSide = (side) =>
-    [0, 1].map((idx) => {
-      const id = prev?.home?.parents?.[side]?.[idx]
-      if (id == null) return null
-      const normalizedId = String(id)
-      return escapedCatIdsSet.has(normalizedId) ? null : normalizedId
-    })
-  const nextParents = {
-    left: normalizeParentSide('left'),
-    right: normalizeParentSide('right'),
-  }
-
   let cats = prevCats
     .map((cat) => ({ ...cat }))
     .filter((cat) => !escapedCatIdsSet.has(String(cat?.id ?? '')))
-
-  let kittens = Array.from({ length: 12 }, (_, idx) => {
-    const kitten = prevKittens[idx]
-    return kitten ? { ...kitten } : null
-  }).map((kitten) => {
-    if (!kitten) return null
-    if (escapedCatIdsSet.has(String(kitten.id))) return null
-    if (isNurseryCatSick(kitten)) {
-      const escaped = {
-        ...kitten,
-        status: 'ESCAPED',
-        isEscaped: true,
-        escapeReason: 'SICK_UNTREATED',
-      }
-      const escapedId = String(kitten.id)
-      escapedById.set(escapedId, escaped)
-      escapedCatIdsSet.add(escapedId)
-      escapedSickKittens.push(escaped)
-      return null
-    }
-    return kitten
-  })
 
   cats = cats.map((cat) => {
     const nextAge = Number(cat.age ?? 0) + 1
@@ -412,113 +377,200 @@ export const buildSeasonTransition = (
     }
   })
 
-  const grown = []
-  const nextKittens = kittens.map((kitten) => {
-    if (!kitten) return null
-    const next = {
-      ...kitten,
-      age: Number(kitten.age ?? 0) + 1,
-      hungry: true,
-      fedThisSeason: false,
-      ...resolveDiseaseState(kitten),
-    }
-    if (next.age >= adultAge) {
-      grown.push({ ...next, hungry: true, fedThisSeason: false, isKitten: false })
-      return null
-    }
-    return next
-  })
-  cats = [...cats, ...grown]
-
-  const spawnBySide = { left: [], right: [] }
   const base = Date.now()
   let birthSeq = 0
-  const addBabies = (side, colorA, colorB) => {
-    const createBaby = (sex, color) => ({
-      id: `born-${base}-${side}-${birthSeq++}-${Math.random().toString(16).slice(2, 6)}`,
-      sex,
-      color: normalizeColor(color),
-    })
-    spawnBySide[side].push(
-      createBaby('M', colorA),
-      createBaby('M', colorA),
-      createBaby('F', colorA),
-      createBaby('M', colorB),
-      createBaby('M', colorB),
-      createBaby('F', colorB)
-    )
-  }
-
   const catsById = Object.fromEntries(cats.map((cat) => [cat.id, cat]))
-  if (prev?.home?.breedPending?.left) {
-    const [leftA, leftB] = nextParents.left
-    const parentA = leftA ? catsById[leftA] : null
-    const parentB = leftB ? catsById[leftB] : null
-    if (parentA && parentB) {
-      addBabies(
-        'left',
-        normalizeColor(parentA?.color || 'black'),
-        normalizeColor(parentB?.color || 'white')
-      )
-    }
-  }
-  if (prev?.home?.breedPending?.right) {
-    const [rightA, rightB] = nextParents.right
-    const parentA = rightA ? catsById[rightA] : null
-    const parentB = rightB ? catsById[rightB] : null
-    if (parentA && parentB) {
-      addBabies(
-        'right',
-        normalizeColor(parentA?.color || 'gray'),
-        normalizeColor(parentB?.color || 'ginger')
-      )
-    }
-  }
+  const createBaby = (homeId, side, sex, color) => ({
+    id: `born-${base}-${homeId}-${side}-${birthSeq++}-${Math.random().toString(16).slice(2, 6)}`,
+    sex,
+    color: normalizeColor(color),
+  })
 
-  const placeBySide = (side, from, to) => {
-    spawnBySide[side].forEach((baby) => {
-      const slice = nextKittens.slice(from, to)
-      const slot = slice.findIndex((kitten) => !kitten)
-      if (slot < 0) return
-      const diseaseState = maybeCreateBirthDisease(rng)
-      const nextBaby = {
-        ...baby,
-        age: 0,
-        hungry: false,
-        fedThisSeason: true,
-        isKitten: true,
-        locked: false,
-        ...diseaseState,
+  const nextHomes = prevHomes.map((home, homeIndex) => {
+    const normalizeParentSide = (side) =>
+      [0, 1].map((idx) => {
+        const id = home?.parents?.[side]?.[idx]
+        if (id == null) return null
+        const normalizedId = String(id)
+        return escapedCatIdsSet.has(normalizedId) ? null : normalizedId
+      })
+
+    const nextParents = {
+      left: normalizeParentSide('left'),
+      right: normalizeParentSide('right'),
+    }
+
+    const grown = []
+    const nextKittens = Array.from({ length: 12 }, (_, idx) => {
+      const kitten = home?.kittens?.[idx]
+      return kitten ? { ...kitten } : null
+    }).map((kitten) => {
+      if (!kitten) return null
+      if (escapedCatIdsSet.has(String(kitten.id))) return null
+      if (isNurseryCatSick(kitten)) {
+        const escaped = {
+          ...kitten,
+          status: 'ESCAPED',
+          isEscaped: true,
+          escapeReason: 'SICK_UNTREATED',
+        }
+        const escapedId = String(kitten.id)
+        escapedById.set(escapedId, escaped)
+        escapedCatIdsSet.add(escapedId)
+        escapedSickKittens.push(escaped)
+        return null
       }
-      nextKittens[from + slot] = {
-        ...nextBaby,
+      const next = {
+        ...kitten,
+        age: Number(kitten.age ?? 0) + 1,
+        hungry: true,
+        fedThisSeason: false,
+        ...resolveDiseaseState(kitten),
       }
-      if (nextBaby.isSick) {
-        bornSickKittens.push(nextBaby)
+      if (next.age >= adultAge) {
+        grown.push({ ...next, hungry: true, fedThisSeason: false, isKitten: false })
+        return null
       }
+      return next
     })
-  }
-  placeBySide('left', 0, 6)
-  placeBySide('right', 6, 12)
+    if (grown.length) {
+      cats = [...cats, ...grown]
+      grown.forEach((cat) => {
+        catsById[cat.id] = cat
+      })
+    }
+
+    const spawnBySide = { left: [], right: [] }
+    const addBabies = (side, colorA, colorB) => {
+      const homeId = String(home.id || `home-${homeIndex + 1}`)
+      spawnBySide[side].push(
+        createBaby(homeId, side, 'M', colorA),
+        createBaby(homeId, side, 'M', colorA),
+        createBaby(homeId, side, 'F', colorA),
+        createBaby(homeId, side, 'M', colorB),
+        createBaby(homeId, side, 'M', colorB),
+        createBaby(homeId, side, 'F', colorB)
+      )
+    }
+
+    if (home?.breedPending?.left) {
+      const [leftA, leftB] = nextParents.left
+      const parentA = leftA ? catsById[leftA] : null
+      const parentB = leftB ? catsById[leftB] : null
+      if (parentA && parentB) {
+        addBabies(
+          'left',
+          normalizeColor(parentA?.color || 'black'),
+          normalizeColor(parentB?.color || 'white')
+        )
+      }
+    }
+    if (home?.breedPending?.right) {
+      const [rightA, rightB] = nextParents.right
+      const parentA = rightA ? catsById[rightA] : null
+      const parentB = rightB ? catsById[rightB] : null
+      if (parentA && parentB) {
+        addBabies(
+          'right',
+          normalizeColor(parentA?.color || 'gray'),
+          normalizeColor(parentB?.color || 'ginger')
+        )
+      }
+    }
+
+    const placeBySide = (side, from, to) => {
+      spawnBySide[side].forEach((baby) => {
+        const slice = nextKittens.slice(from, to)
+        const slot = slice.findIndex((kitten) => !kitten)
+        if (slot < 0) return
+        const diseaseState = maybeCreateBirthDisease(rng)
+        const nextBaby = {
+          ...baby,
+          age: 0,
+          hungry: false,
+          fedThisSeason: true,
+          isKitten: true,
+          locked: false,
+          ...diseaseState,
+        }
+        nextKittens[from + slot] = { ...nextBaby }
+        if (nextBaby.isSick) {
+          bornSickKittens.push(nextBaby)
+        }
+      })
+    }
+
+    placeBySide('left', 0, 6)
+    placeBySide('right', 6, 12)
+
+    return {
+      ...createDefaultHome(home.number || homeIndex + 1),
+      ...home,
+      id: String(home.id || `home-${homeIndex + 1}`),
+      number: Math.max(1, Number(home.number || homeIndex + 1) || homeIndex + 1),
+      parents: nextParents,
+      kittens: nextKittens,
+      breedPending: { left: false, right: false },
+      lastBreedSeason: {
+        left: normalizeSeasonNumber(home?.lastBreedSeason?.left, 0),
+        right: normalizeSeasonNumber(home?.lastBreedSeason?.right, 0),
+      },
+      insuranceActive: Boolean(home?.insuranceNext),
+      insuranceNext: false,
+    }
+  })
 
   return {
-    nursery: {
+    nursery: withNurseryHomeMirrors({
       ...prev,
       coins,
       cats,
-      home: {
-        ...prev.home,
-        parents: nextParents,
-        kittens: nextKittens,
-        breedPending: { left: false, right: false },
-      },
+      homes: nextHomes,
       escapedCatIds: Array.from(escapedCatIdsSet),
-      insuranceActive: prev.insuranceNext,
-      insuranceNext: false,
-    },
+      activeHomeIndex: clampHomeIndex(prev.activeHomeIndex, nextHomes.length),
+    }),
     escapedHungryCats: Array.from(escapedById.values()),
     escapedSickKittens,
     bornSickKittens,
+  }
+}
+
+const HOME_KITTEN_SLOTS = 12
+
+const createDefaultHome = (number = 1) => ({
+  id: `home-${Math.max(1, Number(number) || 1)}`,
+  number: Math.max(1, Number(number) || 1),
+  insuranceActive: false,
+  insuranceNext: false,
+  parents: { left: [null, null], right: [null, null] },
+  kittens: Array(HOME_KITTEN_SLOTS).fill(null),
+  breedPending: { left: false, right: false },
+  lastBreedSeason: { left: 0, right: 0 },
+})
+
+const clampHomeIndex = (value, totalHomes) => {
+  const count = Math.max(0, Number(totalHomes) || 0)
+  if (count <= 0) return 0
+  const normalized = Number(value)
+  if (!Number.isFinite(normalized)) return 0
+  return Math.min(count - 1, Math.max(0, Math.floor(normalized)))
+}
+
+const withNurseryHomeMirrors = (nursery) => {
+  const base = createDefaultNursery()
+  const source = nursery && typeof nursery === 'object' ? nursery : {}
+  const homes = Array.isArray(source.homes) ? source.homes : []
+  const activeHomeIndex = clampHomeIndex(source.activeHomeIndex, homes.length)
+  const activeHome = homes[activeHomeIndex] ? { ...homes[activeHomeIndex] } : createDefaultHome(1)
+  return {
+    ...base,
+    ...source,
+    homes,
+    activeHomeIndex,
+    hasHome: homes.length > 0,
+    insuranceActive: homes.length > 0 ? Boolean(activeHome.insuranceActive) : false,
+    insuranceNext: homes.length > 0 ? Boolean(activeHome.insuranceNext) : false,
+    home: activeHome,
   }
 }
 
@@ -530,12 +582,9 @@ const createDefaultNursery = () => ({
   insuranceNext: false,
   cats: [],
   escapedCatIds: [],
-  home: {
-    parents: { left: [null, null], right: [null, null] },
-    kittens: Array(12).fill(null),
-    breedPending: { left: false, right: false },
-    lastBreedSeason: { left: 0, right: 0 },
-  },
+  homes: [],
+  activeHomeIndex: 0,
+  home: createDefaultHome(1),
 })
 
 const createDefaultSeasonLedger = (seasonNumber = 1, startCoins = 0) => ({
@@ -694,26 +743,11 @@ export const normalizeNurseryCat = (cat, { forceKitten = null, adultAge = DEFAUL
   }
 }
 
-export const normalizeNurseryState = (rawNursery, adultAge = DEFAULT_ADULT_AGE) => {
-  const defaults = createDefaultNursery()
-  if (!rawNursery || typeof rawNursery !== 'object') return defaults
-
-  const sourceHome = rawNursery.home && typeof rawNursery.home === 'object' ? rawNursery.home : {}
-  const escapedCatIds = Array.from(
-    new Set(
-      (Array.isArray(rawNursery.escapedCatIds) ? rawNursery.escapedCatIds : [])
-        .map((id) => (id == null ? null : String(id)))
-        .filter(Boolean)
-    )
-  )
-  const escapedCatIdsSet = new Set(escapedCatIds)
-  const cats = (Array.isArray(rawNursery.cats) ? rawNursery.cats : [])
-    .map((cat) => normalizeNurseryCat(cat, { adultAge }))
-    .filter((cat) => !escapedCatIdsSet.has(String(cat?.id ?? '')))
-    .filter(Boolean)
-  const catsById = new Set(cats.map((cat) => cat.id))
+const normalizeHomeState = (home, index, catsById, escapedCatIdsSet, adultAge = DEFAULT_ADULT_AGE) => {
+  const base = createDefaultHome(index + 1)
+  const sourceHome = home && typeof home === 'object' ? home : {}
   const sourceKittens = Array.isArray(sourceHome.kittens) ? sourceHome.kittens : []
-  const kittens = Array.from({ length: 12 }, (_, idx) => {
+  const kittens = Array.from({ length: HOME_KITTEN_SLOTS }, (_, idx) => {
     const kitten = normalizeNurseryCat(sourceKittens[idx], { forceKitten: true, adultAge })
     if (!kitten) return null
     return escapedCatIdsSet.has(String(kitten.id)) ? null : kitten
@@ -731,33 +765,73 @@ export const normalizeNurseryState = (rawNursery, adultAge = DEFAULT_ADULT_AGE) 
   }
 
   return {
+    ...base,
+    ...sourceHome,
+    id: String(sourceHome.id || base.id),
+    number: Math.max(1, Number(sourceHome.number || index + 1) || index + 1),
+    insuranceActive: Boolean(sourceHome.insuranceActive),
+    insuranceNext: Boolean(sourceHome.insuranceNext),
+    parents: {
+      left: normalizeParentsSide('left'),
+      right: normalizeParentsSide('right'),
+    },
+    kittens,
+    breedPending: {
+      left: Boolean(sourceHome?.breedPending?.left),
+      right: Boolean(sourceHome?.breedPending?.right),
+    },
+    lastBreedSeason: {
+      left: normalizeSeasonNumber(sourceHome?.lastBreedSeason?.left, 0),
+      right: normalizeSeasonNumber(sourceHome?.lastBreedSeason?.right, 0),
+    },
+  }
+}
+
+export const normalizeNurseryState = (rawNursery, adultAge = DEFAULT_ADULT_AGE) => {
+  const defaults = createDefaultNursery()
+  if (!rawNursery || typeof rawNursery !== 'object') return defaults
+
+  const escapedCatIds = Array.from(
+    new Set(
+      (Array.isArray(rawNursery.escapedCatIds) ? rawNursery.escapedCatIds : [])
+        .map((id) => (id == null ? null : String(id)))
+        .filter(Boolean)
+    )
+  )
+  const escapedCatIdsSet = new Set(escapedCatIds)
+  const cats = (Array.isArray(rawNursery.cats) ? rawNursery.cats : [])
+    .map((cat) => normalizeNurseryCat(cat, { adultAge }))
+    .filter((cat) => !escapedCatIdsSet.has(String(cat?.id ?? '')))
+    .filter(Boolean)
+  const catsById = new Set(cats.map((cat) => cat.id))
+  const sourceHomes =
+    Array.isArray(rawNursery.homes) && rawNursery.homes.length
+      ? rawNursery.homes
+      : Boolean(rawNursery.hasHome || rawNursery.home || rawNursery.insuranceActive || rawNursery.insuranceNext)
+        ? [
+            {
+              ...(rawNursery.home && typeof rawNursery.home === 'object' ? rawNursery.home : {}),
+              id: 'home-1',
+              number: 1,
+              insuranceActive: Boolean(rawNursery.insuranceActive),
+              insuranceNext: Boolean(rawNursery.insuranceNext),
+            },
+          ]
+        : []
+  const homes = sourceHomes.map((home, index) =>
+    normalizeHomeState(home, index, catsById, escapedCatIdsSet, adultAge)
+  )
+
+  return withNurseryHomeMirrors({
     ...defaults,
     ...rawNursery,
     coins: Math.max(0, Number(rawNursery.coins) || 0),
     coinsSynced: Boolean(rawNursery.coinsSynced),
-    hasHome: Boolean(rawNursery.hasHome),
-    insuranceActive: Boolean(rawNursery.insuranceActive),
-    insuranceNext: Boolean(rawNursery.insuranceNext),
     cats,
     escapedCatIds,
-    home: {
-      ...defaults.home,
-      ...sourceHome,
-      parents: {
-        left: normalizeParentsSide('left'),
-        right: normalizeParentsSide('right'),
-      },
-      kittens,
-      breedPending: {
-        left: Boolean(sourceHome?.breedPending?.left),
-        right: Boolean(sourceHome?.breedPending?.right),
-      },
-      lastBreedSeason: {
-        left: normalizeSeasonNumber(sourceHome?.lastBreedSeason?.left, 0),
-        right: normalizeSeasonNumber(sourceHome?.lastBreedSeason?.right, 0),
-      },
-    },
-  }
+    homes,
+    activeHomeIndex: clampHomeIndex(rawNursery.activeHomeIndex, homes.length),
+  })
 }
 
 const clearStoredPlayProgress = (sessionId) => {
@@ -1009,63 +1083,69 @@ export default function PlayMapPage({ me }) {
           cat?.id &&
           !escapedIds.has(cat.id) &&
           !(prev?.cats || []).some((existing) => existing?.id === cat.id) &&
-          !((prev?.home?.kittens || []).filter(Boolean)).some((existing) => existing?.id === cat.id)
+          !((prev?.homes || []).flatMap((home) => (home?.kittens || []).filter(Boolean)).some((existing) => existing?.id === cat.id))
       )
       const keepLocalOnlyId = (id) => typeof id === 'string' && id.startsWith('born-')
       const prevCats = prev?.cats || []
-      const prevHomeKittens = prev?.home?.kittens || []
-      const prevParentsLeft = prev?.home?.parents?.left || []
-      const prevParentsRight = prev?.home?.parents?.right || []
+      const prevHomes = Array.isArray(prev?.homes) ? prev.homes : []
       const nextCats = prevCats.filter((cat) => {
         const catId = String(cat?.id ?? '')
         return !catId || keepLocalOnlyId(catId) || backendIds.has(catId)
       })
-      const nextHomeKittens = prevHomeKittens.map((cat) => {
-        if (!cat?.id) return cat
-        const catId = String(cat.id)
-        return keepLocalOnlyId(catId) || backendIds.has(catId) ? cat : null
-      })
-      const nextParentsLeft = prevParentsLeft.map((id) => {
-        const normalizedId = id == null ? null : String(id)
-        return normalizedId && (backendIds.has(normalizedId) || keepLocalOnlyId(normalizedId))
-          ? normalizedId
-          : null
-      })
-      const nextParentsRight = prevParentsRight.map((id) => {
-        const normalizedId = id == null ? null : String(id)
-        return normalizedId && (backendIds.has(normalizedId) || keepLocalOnlyId(normalizedId))
-          ? normalizedId
-          : null
-      })
-      const catsChanged =
-        nextCats.length !== prevCats.length ||
-        nextCats.some((cat, idx) => cat !== prevCats[idx])
-      const homeKittensChanged = nextHomeKittens.some((cat, idx) => cat !== prevHomeKittens[idx])
-      const parentsChanged =
-        nextParentsLeft.some((id, idx) => id !== prevParentsLeft[idx]) ||
-        nextParentsRight.some((id, idx) => id !== prevParentsRight[idx])
-      if (!missing.length && !catsChanged && !homeKittensChanged && !parentsChanged) {
-        return prev
-      }
-      return {
-        ...prev,
-        cats: [...nextCats, ...missing],
-        home: {
-          ...prev.home,
+      const nextHomes = prevHomes.map((home) => {
+        const nextKittens = (home?.kittens || []).map((cat) => {
+          if (!cat?.id) return cat
+          const catId = String(cat.id)
+          return keepLocalOnlyId(catId) || backendIds.has(catId) ? cat : null
+        })
+        const nextParentsLeft = (home?.parents?.left || []).map((id) => {
+          const normalizedId = id == null ? null : String(id)
+          return normalizedId && (backendIds.has(normalizedId) || keepLocalOnlyId(normalizedId))
+            ? normalizedId
+            : null
+        })
+        const nextParentsRight = (home?.parents?.right || []).map((id) => {
+          const normalizedId = id == null ? null : String(id)
+          return normalizedId && (backendIds.has(normalizedId) || keepLocalOnlyId(normalizedId))
+            ? normalizedId
+            : null
+        })
+        return {
+          ...home,
           parents: {
             left: nextParentsLeft,
             right: nextParentsRight,
           },
-          kittens: nextHomeKittens,
-        },
+          kittens: nextKittens,
+        }
+      })
+      const catsChanged =
+        nextCats.length !== prevCats.length ||
+        nextCats.some((cat, idx) => cat !== prevCats[idx])
+      const homesChanged = nextHomes.some((home, idx) => {
+        const prevHome = prevHomes[idx]
+        if (!prevHome) return true
+        return (
+          home.kittens.some((cat, kittenIdx) => cat !== prevHome?.kittens?.[kittenIdx]) ||
+          home.parents.left.some((id, parentIdx) => id !== prevHome?.parents?.left?.[parentIdx]) ||
+          home.parents.right.some((id, parentIdx) => id !== prevHome?.parents?.right?.[parentIdx])
+        )
+      })
+      if (!missing.length && !catsChanged && !homesChanged) {
+        return prev
       }
+      return withNurseryHomeMirrors({
+        ...prev,
+        cats: [...nextCats, ...missing],
+        homes: nextHomes,
+      })
     })
   }, [backendInventoryEntities, normalizedBackendKittens, hasStructuredInventory])
 
   const inventoryEntities = useMemo(() => {
     const nurseryEntities = [
       ...(nursery?.cats || []),
-      ...(nursery?.home?.kittens || []).filter(Boolean),
+      ...((nursery?.homes || []).flatMap((home) => (home?.kittens || []).filter(Boolean))),
     ]
       .filter((cat) => !escapedCatIdsSet.has(String(cat?.id ?? '')))
       .filter((cat) => resolveKittenStatus(cat, adultAge))
@@ -1122,7 +1202,7 @@ export default function PlayMapPage({ me }) {
       merged.push(entity)
     })
     return merged
-  }, [backendInventoryEntities, nursery?.cats, nursery?.home?.kittens, playerRole, escapedCatIdsSet, adultAge, hasStructuredInventory])
+  }, [backendInventoryEntities, nursery?.cats, nursery?.homes, playerRole, escapedCatIdsSet, adultAge, hasStructuredInventory])
 
   const resolveCounterpartyContext = useCallback(
     (context = null) => {
@@ -1627,45 +1707,51 @@ export default function PlayMapPage({ me }) {
             kitten.fedThisSeason = true
             return kitten
           })
-          return { ...prev, cats: [...(prev.cats || []), ...additions] }
+          return withNurseryHomeMirrors({ ...prev, cats: [...(prev.cats || []), ...additions] })
         }
         if (action === 'sell') {
+          const prevHomes = Array.isArray(prev?.homes) ? prev.homes : []
           if (context?.entityId) {
             const targetId = context.entityId
-            return {
+            return withNurseryHomeMirrors({
               ...prev,
               cats: (prev.cats || []).filter((cat) => cat.id !== targetId),
-              home: {
-                ...prev.home,
+              homes: prevHomes.map((home) => ({
+                ...home,
                 parents: {
-                  left: (prev?.home?.parents?.left || []).map((id) => (id === targetId ? null : id)),
-                  right: (prev?.home?.parents?.right || []).map((id) => (id === targetId ? null : id)),
+                  left: (home?.parents?.left || []).map((id) => (id === targetId ? null : id)),
+                  right: (home?.parents?.right || []).map((id) => (id === targetId ? null : id)),
                 },
-                kittens: (prev?.home?.kittens || []).map((cat) => (cat?.id === targetId ? null : cat)),
-              },
-            }
+                kittens: (home?.kittens || []).map((cat) => (cat?.id === targetId ? null : cat)),
+              })),
+            })
           }
           const assigned = new Set()
-          prev?.home?.parents?.left?.forEach((id) => id && assigned.add(id))
-          prev?.home?.parents?.right?.forEach((id) => id && assigned.add(id))
+          prevHomes.forEach((home) => {
+            home?.parents?.left?.forEach((id) => id && assigned.add(id))
+            home?.parents?.right?.forEach((id) => id && assigned.add(id))
+          })
 
           let remaining = qty
-          const nextHomeKittens = (prev?.home?.kittens || []).map((cat) => {
-            if (!cat || remaining <= 0) return cat
-            const colorMatch = normalizeColor(cat?.color) === normalizedColor
-            const sexMatch = normalizedSex ? normalizeSex(cat?.sex) === normalizedSex : true
-            const sellableKitten =
-              resolveKittenStatus(cat, adultAge) &&
-              !assigned.has(cat.id) &&
-              !cat.locked &&
-              !cat.hungry &&
-              !isNurseryCatSick(cat)
-            if (sellableKitten && colorMatch && sexMatch) {
-              remaining -= 1
-              return null
-            }
-            return cat
-          })
+          const nextHomes = prevHomes.map((home) => ({
+            ...home,
+            kittens: (home?.kittens || []).map((cat) => {
+              if (!cat || remaining <= 0) return cat
+              const colorMatch = normalizeColor(cat?.color) === normalizedColor
+              const sexMatch = normalizedSex ? normalizeSex(cat?.sex) === normalizedSex : true
+              const sellableKitten =
+                resolveKittenStatus(cat, adultAge) &&
+                !assigned.has(cat.id) &&
+                !cat.locked &&
+                !cat.hungry &&
+                !isNurseryCatSick(cat)
+              if (sellableKitten && colorMatch && sexMatch) {
+                remaining -= 1
+                return null
+              }
+              return cat
+            }),
+          }))
           const nextCats = []
           ;(prev.cats || []).forEach((cat) => {
             const colorMatch = normalizeColor(cat?.color) === normalizedColor
@@ -1682,14 +1768,11 @@ export default function PlayMapPage({ me }) {
             }
             nextCats.push(cat)
           })
-          return {
+          return withNurseryHomeMirrors({
             ...prev,
             cats: nextCats,
-            home: {
-              ...prev.home,
-              kittens: nextHomeKittens,
-            },
-          }
+            homes: nextHomes,
+          })
           }
         return prev
       })
@@ -2092,7 +2175,6 @@ export default function PlayMapPage({ me }) {
               alt={`petshop ${shop.id}`}
               onError={imgFallback}
             />
-            <span className="mapBadge">#{shop.id}</span>
           </button>
         ))}
 
@@ -2122,7 +2204,6 @@ export default function PlayMapPage({ me }) {
                   <span className="yourLabel">ТВОЙ ПИТОМНИК</span>
                 </>
               ) : null}
-              <span className="mapBadge">#{cat.id}</span>
             </button>
           )
         })}
@@ -2303,7 +2384,7 @@ export default function PlayMapPage({ me }) {
         open={welcomeOpen}
         onClose={handleWelcomeClose}
         playerName="Леопольд"
-        startCoins={Math.max(0, Number(state?.coinsNowEstimate ?? 1000) || 1000)}
+        startCoins={Math.max(0, Number(state?.coinsNowEstimate ?? 40) || 40)}
       />
 
       <RequestsSidebar requests={visibleTradeRequests} onOpenRequest={handleOpenRequest} />

@@ -948,21 +948,6 @@ export default function MarketOverlay({
                 </div>
               </div>
 
-              {spectateMode ? (
-                <div className="trade-spectate-meta">
-                  <div>Сделок в сезоне: {Number(spectateData?.dealsThisSeason ?? 0)}</div>
-                  <div>
-                    Последняя сделка:{' '}
-                    {spectateData?.lastDealSecondsAgo == null
-                      ? 'нет'
-                      : `${Number(spectateData.lastDealSecondsAgo)} сек назад`}
-                  </div>
-                  <div>
-                    Средняя цена продажи:{' '}
-                    {Number(spectateData?.avgSellPriceThisSeason ?? 0).toFixed(2)}
-                  </div>
-                </div>
-              ) : null}
             </section>
 
             <section

@@ -112,6 +112,18 @@ class PlatformFlowTests(unittest.TestCase):
         self.assertEqual(continue_response.status_code, 409)
         self.assertEqual(continue_response.json()['detail']['error'], 'SESSION_ALREADY_FINISHED')
 
+    def test_new_session_starts_with_configured_balance(self):
+        self._register_verify_login(email='start-balance@example.com')
+
+        start = self.client.post('/api/sessions/start')
+        self.assertEqual(start.status_code, 200)
+        session_id = start.json()['sessionId']
+
+        state = self.client.get(f'/api/game/state/{session_id}/1')
+        self.assertEqual(state.status_code, 200)
+        self.assertEqual(state.json()['coinsNowEstimate'], CONFIG_START_COINS)
+        self.assertEqual(CONFIG_START_COINS, 40)
+
     def test_competency_floor_is_one(self):
         self._register_verify_login(email='floor@example.com')
 
