@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
@@ -20,6 +20,7 @@ from .deps import (
     get_ws_current_user,
 )
 from . import crud
+from . import trade_requests as trade_requests_service
 from .auth_schemas import (
     AvatarOut,
     ChangePasswordIn,
@@ -81,7 +82,6 @@ from .models import Season
 from .schemas import CompetencyProfileOut
 from . import models
 from .generate_report import generate_competency_report
-from . import trade_requests as trade_requests_service
 from .trade_realtime import trade_realtime_hub
 from .db import SessionLocal
 from .cattery_ai import get_public_spectate_view, ensure_competitors_for_session
@@ -102,7 +102,7 @@ Base.metadata.create_all(bind=engine)
 ensure_auth_columns()
 ensure_platform_columns()
 
-app = FastAPI(title="Business Cats Lite API", version="1.0")
+app = FastAPI(title="Cattary Manager Lite API", version="1.0")
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 UPLOADS_DIR = BACKEND_DIR / "uploads"
@@ -274,7 +274,7 @@ def _resolve_place(*, player_coins: int, bot_coins: int, bankrupt: bool) -> int:
 
 
 def _now_utc() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _is_session_active(session: GameSession) -> bool:
@@ -1336,6 +1336,16 @@ def _build_game_state(
         "market": market,
         "inventory": inventory,
         "inventoryEntities": inventory_entities,
+        "shopTrustPercent": (
+            trade_requests_service.get_shop_trust_percent(
+                db,
+                session.id,
+                trade_requests_service.user_player_id(session.user_id),
+                trade_requests_service.counterparty_player_id("shop", int(counterparty_id)),
+            )
+            if counterparty_type == "shop" and counterparty_id is not None
+            else None
+        ),
         "coinsNowEstimate": est["coins"],
         "debtTotal": est["debt_total"],
         "debtRate": float(est["debt_rate"]),
@@ -1361,6 +1371,7 @@ def game_state(
             "market": {},
             "inventory": {},
             "inventoryEntities": [],
+            "shopTrustPercent": None,
             "coinsNowEstimate": 0,
             "debtTotal": 0,
             "debtRate": 0.0,
@@ -1965,7 +1976,7 @@ def sessions_history(user=Depends(get_current_active_user), db: Session = Depend
             {
                 "id": session.id,
                 "sessionType": "Стандарт",
-                "simulation": "Business Cats",
+                "simulation": "Cattary Manager",
                 "ratingType": "Рейтингуемая",
                 "participants": "1/1",
                 "startedAt": session.started_at.isoformat() if session.started_at else None,

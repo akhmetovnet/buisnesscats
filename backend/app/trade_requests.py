@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import random
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -17,6 +17,7 @@ from .trade_bot import (
     OfferDecision,
     ShopBotState,
     bot_display_buy_price,
+    bot_display_sell_price,
     decide_on_offer,
     shop_bot_archetype,
     update_relation,
@@ -51,6 +52,10 @@ BOT_SHOP_NAMES: dict[int, str] = {
 OPEN_STATES = {TradeState.PENDING, TradeState.COUNTERED, TradeState.NEEDS_CLARIFICATION, TradeState.AWAITING_CLARIFICATION}
 SELLER_SIDE = "SELL"
 BUYER_SIDE = "BUY"
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def user_player_id(user_id: str) -> str:
@@ -294,10 +299,10 @@ def _only_kittens_trade_meta() -> tuple[str, dict[str, Any]]:
     }
 
 
-def _sick_kittens_trade_meta() -> tuple[str, dict[str, Any]]:
-    return "SICK_KITTENS_CANNOT_BE_TRADED", {
-        "message": "Больных котят нельзя продавать",
-    }
+def _relation_score_to_trust_percent(score: float | int | None) -> int:
+    numeric = 5.0 if score is None else float(score)
+    numeric = max(0.0, min(5.0, numeric))
+    return max(0, min(100, int(round(numeric * 20))))
 
 
 def _ensure_relation(
@@ -328,6 +333,26 @@ def _ensure_relation(
     db.add(relation)
     db.flush()
     return relation
+
+
+def get_shop_trust_percent(
+    db: Session,
+    session_id: str,
+    viewer_player_id: str,
+    bot_player_id: str,
+) -> int:
+    relation = (
+        db.query(TradeRelation)
+        .filter(
+            TradeRelation.session_id == session_id,
+            TradeRelation.player_id == viewer_player_id,
+            TradeRelation.counterparty_id == bot_player_id,
+        )
+        .one_or_none()
+    )
+    if not relation:
+        return 100
+    return _relation_score_to_trust_percent(relation.relation_score)
 
 
 def _ensure_bot_state(db: Session, session_id: str, bot_player_id: str) -> TradeBotState:
@@ -390,7 +415,7 @@ def _inherit_expires_at(ttl_seconds: int | None) -> datetime | None:
     ttl = _safe_int(ttl_seconds, 0)
     if ttl <= 0:
         return None
-    return datetime.utcnow() + timedelta(seconds=ttl)
+    return _utc_now() + timedelta(seconds=ttl)
 
 
 def _archive_request_version(req: TradeRequest, *, message_code: str | None = None) -> None:
@@ -401,7 +426,7 @@ def _archive_request_version(req: TradeRequest, *, message_code: str | None = No
     req.read_by_to = True
     req.hidden_by_from = True
     req.hidden_by_to = True
-    req.updated_at = datetime.utcnow()
+    req.updated_at = _utc_now()
 
 
 def _create_request_version(
@@ -508,11 +533,14 @@ def build_shop_market_view(
     synced = json.loads(json.dumps(market))
     for color in ["black", "white", "gray", "ginger"]:
         display_buy_price = bot_display_buy_price(bot_state, color)
+        display_sell_price = bot_display_sell_price(bot_state, color)
         if color not in synced:
             continue
+        synced[color]["buy"] = display_sell_price
         synced[color]["sell"] = display_buy_price
         for sex in ("M", "F"):
             if isinstance(synced[color].get(sex), dict):
+                synced[color][sex]["buy"] = display_sell_price
                 synced[color][sex]["sell"] = display_buy_price
     return synced
 
@@ -615,7 +643,7 @@ def _to_out(req: TradeRequest, viewer_player_id: str, viewer_user_id: str | None
 
 
 def _expire_stale_requests(db: Session, session_id: str, season_number: int) -> list[TradeRequest]:
-    now = datetime.utcnow()
+    now = _utc_now()
     stale = (
         db.query(TradeRequest)
         .filter(
@@ -632,7 +660,7 @@ def _expire_stale_requests(db: Session, session_id: str, season_number: int) -> 
             req.state = transition_state(req.state, TradeAction.EXPIRE).to_state
             req.next_actor_player_id = None
             req.message_code = "TTL_EXPIRED"
-            req.updated_at = datetime.utcnow()
+            req.updated_at = _utc_now()
             req.read_by_from = False
             req.read_by_to = False
     return stale
@@ -724,8 +752,10 @@ def _build_shop_bot_state(
 
     demand_by_type: dict[str, int] = {}
     expected_resale_value: dict[str, int] = {}
+    shop_sell_price_by_type: dict[str, int] = {}
     for color in ["black", "white", "gray", "ginger"]:
         market_value = max(1, _safe_int(market.get(color, {}).get("sell"), 1))
+        shop_sell_price_by_type[color] = max(1, _safe_int(market.get(color, {}).get("buy"), 1))
         expected_resale_value[color] = market_value
         demand = 0
         if market_value >= avg_sell + 2:
@@ -753,6 +783,7 @@ def _build_shop_bot_state(
         expectedResaleValueByType=expected_resale_value,
         recentAcceptedPricesByType=_recent_accepted_prices_by_type(db, session_id, bot_player_id),
         pendingRequestsCount=_pending_requests_count(db, session_id, bot_player_id),
+        shopSellPriceByType=shop_sell_price_by_type,
         archetype=shop_bot_archetype(bot_player_id),
     )
 
@@ -767,6 +798,137 @@ def _market_prices_for_player(session_id: str, season_number: int, player_id: st
 
 def _make_inventory_moved(sex: str | None) -> dict[str, int]:
     return {"M": 1 if sex == "M" else 0, "F": 1 if sex == "F" else 0}
+
+
+def _sync_nursery_home_mirrors(nursery: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(nursery, dict):
+        return {}
+    homes = nursery.get("homes")
+    if not isinstance(homes, list):
+        homes = []
+    active_index = _safe_int(nursery.get("activeHomeIndex"), 0)
+    if homes:
+        active_index = max(0, min(active_index, len(homes) - 1))
+        active_home = homes[active_index]
+        nursery["homes"] = homes
+        nursery["activeHomeIndex"] = active_index
+        nursery["hasHome"] = True
+        nursery["home"] = json.loads(json.dumps(active_home, ensure_ascii=False))
+        nursery["insuranceActive"] = bool(active_home.get("insuranceActive"))
+        nursery["insuranceNext"] = bool(active_home.get("insuranceNext"))
+    else:
+        nursery["homes"] = []
+        nursery["activeHomeIndex"] = 0
+        nursery["hasHome"] = False
+    return nursery
+
+
+def _take_exact_item_from_nursery(
+    nursery: dict[str, Any],
+    *,
+    cat_id: str | None,
+    color: str,
+    sex: str | None,
+) -> tuple[bool, dict[str, int], list[dict[str, Any]], str | None, dict[str, Any] | None]:
+    if not isinstance(nursery, dict):
+        return False, {"M": 0, "F": 0}, [], "CAT_NOT_AVAILABLE", {
+            "message": "Котёнок уже недоступен для сделки",
+        }
+
+    escaped_ids = {
+        str(cat_id_value)
+        for cat_id_value in (nursery.get("escapedCatIds") or [])
+        if cat_id_value is not None
+    }
+
+    def cat_matches(entity: Any) -> bool:
+        if not isinstance(entity, dict):
+            return False
+        entity_id = str(entity.get("id") or "")
+        if not entity_id or entity_id in escaped_ids:
+            return False
+        entity_color = _norm_color(entity.get("color"))
+        entity_sex = _norm_sex(entity.get("sex"))
+        if entity_color != color or (sex and entity_sex != sex):
+            return False
+        return True
+
+    def take_from_list(
+        values: list[Any],
+        *,
+        fixed_slots: bool,
+    ) -> tuple[bool, dict[str, Any] | None, list[Any], str | None, dict[str, Any] | None]:
+        matched_indexes: list[int] = []
+        kitten_index: int | None = None
+        exact_index: int | None = None
+        for index, entity in enumerate(values):
+            if not cat_matches(entity):
+                continue
+            matched_indexes.append(index)
+            entity_id = str(entity.get("id") or "")
+            if cat_id and entity_id == cat_id:
+                exact_index = index
+                if _entity_is_kitten(entity):
+                    kitten_index = index
+                break
+            if not cat_id and kitten_index is None and _entity_is_kitten(entity):
+                kitten_index = index
+        if cat_id and exact_index is not None and kitten_index is None:
+            reason, meta = _only_kittens_trade_meta()
+            return False, None, values if fixed_slots else list(values), reason, meta
+        if cat_id and exact_index is None:
+            return False, None, values if fixed_slots else list(values), None, None
+        target_index = kitten_index
+        if target_index is None:
+            if matched_indexes:
+                reason, meta = _only_kittens_trade_meta()
+                return False, None, values if fixed_slots else list(values), reason, meta
+            return False, None, values if fixed_slots else list(values), None, None
+        entity = values[target_index]
+        next_values = list(values)
+        if fixed_slots:
+            next_values[target_index] = None
+        else:
+            next_values.pop(target_index)
+        return True, entity, next_values, None, None
+
+    cats = list(nursery.get("cats") or [])
+    ok, entity, next_cats, reason, meta = take_from_list(cats, fixed_slots=False)
+    if ok and entity is not None:
+        nursery["cats"] = next_cats
+        _sync_nursery_home_mirrors(nursery)
+        moved = _make_inventory_moved(_norm_sex(entity.get("sex")))
+        return True, moved, [entity], None, None
+    if reason:
+        return False, {"M": 0, "F": 0}, [], reason, meta
+
+    homes = nursery.get("homes")
+    if not isinstance(homes, list):
+        homes = []
+    if not homes and isinstance(nursery.get("home"), dict):
+        homes = [json.loads(json.dumps(nursery["home"], ensure_ascii=False))]
+    for home_index, home in enumerate(homes):
+        if not isinstance(home, dict):
+            continue
+        kittens = list(home.get("kittens") or [])
+        ok, entity, next_kittens, reason, meta = take_from_list(kittens, fixed_slots=True)
+        if ok and entity is not None:
+            next_home = {**home, "kittens": next_kittens}
+            homes = list(homes)
+            homes[home_index] = next_home
+            nursery["homes"] = homes
+            _sync_nursery_home_mirrors(nursery)
+            moved = _make_inventory_moved(_norm_sex(entity.get("sex")))
+            return True, moved, [entity], None, None
+        if reason:
+            return False, {"M": 0, "F": 0}, [], reason, meta
+
+    reason, meta_json = _clarification_payload(
+        "CAT_NOT_AVAILABLE",
+        unavailable_cat_ids=[cat_id] if cat_id else None,
+        message="Котёнок уже недоступен для сделки",
+    )
+    return False, {"M": 0, "F": 0}, [], reason, json.loads(meta_json)
 
 
 def _take_inventory(counts: dict[str, dict[str, int]], color: str, sex: str | None, qty: int) -> tuple[bool, dict[str, int]]:
@@ -872,9 +1034,6 @@ def _take_exact_item(
             if not _entity_is_kitten(entity):
                 reason, meta_json = _only_kittens_trade_meta()
                 return False, {"M": 0, "F": 0}, [], reason, meta_json
-            if _entity_is_sick(entity):
-                reason, meta_json = _sick_kittens_trade_meta()
-                return False, {"M": 0, "F": 0}, [], reason, meta_json
             entities.pop(index)
             inventory["entities"] = entities
             moved = _make_inventory_moved(entity_sex)
@@ -891,7 +1050,6 @@ def _take_exact_item(
     if entities:
         matched_indexes: list[int] = []
         kitten_index: int | None = None
-        sick_kitten_found = False
         for index, entity in enumerate(entities):
             entity_color = _norm_color(entity.get("color"))
             entity_sex = _norm_sex(entity.get("sex"))
@@ -900,15 +1058,9 @@ def _take_exact_item(
             matched_indexes.append(index)
             if not _entity_is_kitten(entity):
                 continue
-            if _entity_is_sick(entity):
-                sick_kitten_found = True
-                continue
             if kitten_index is None:
                 kitten_index = index
         if matched_indexes and kitten_index is None:
-            if sick_kitten_found:
-                reason, meta_json = _sick_kittens_trade_meta()
-                return False, {"M": 0, "F": 0}, [], reason, meta_json
             reason, meta_json = _only_kittens_trade_meta()
             return False, {"M": 0, "F": 0}, [], reason, meta_json
         if kitten_index is not None:
@@ -937,10 +1089,21 @@ def _take_exact_item(
     return True, moved, moved_entities, None, None
 
 
-def _validate_user_sell_items(session: GameSession, items: list[dict[str, Any]]) -> None:
+def _validate_user_sell_items(db: Session, session: GameSession, season_number: int, items: list[dict[str, Any]]) -> None:
     if not items:
         return
     inventory = crud._parse_inventory(session.inventory_json or "{}")
+    progress = None
+    nursery = None
+    try:
+        progress = crud.get_game_progress(db, session.id, season_number)
+    except Exception:
+        progress = None
+    if progress:
+        try:
+            nursery = json.loads(progress.nursery_json or "{}")
+        except Exception:
+            nursery = None
     for item in items:
         color = _norm_color(item.get("catType"))
         sex = _norm_sex(item.get("catSex"))
@@ -953,6 +1116,13 @@ def _validate_user_sell_items(session: GameSession, items: list[dict[str, Any]])
             color=color,
             sex=sex,
         )
+        if (not ok) and reason in {"CAT_NOT_AVAILABLE", "CAT_ALREADY_SOLD"} and isinstance(nursery, dict):
+            ok, _, _, reason, _ = _take_exact_item_from_nursery(
+                nursery,
+                cat_id=cat_id,
+                color=color,
+                sex=sex,
+            )
         if not ok:
             raise ValueError(reason or "invalid_items")
 
@@ -969,6 +1139,13 @@ def _apply_acceptance_transaction(
     season_number = int(req.season_number)
     player_ledger: dict[str, Any] = {}
     bot_ledgers: dict[str, dict[str, Any]] = {}
+    progress = crud.get_game_progress(db, session.id, season_number)
+    nursery_snapshot: dict[str, Any] | None = None
+    if progress:
+        try:
+            nursery_snapshot = json.loads(progress.nursery_json or "{}")
+        except Exception:
+            nursery_snapshot = None
 
     def get_ledger(player_id: str) -> dict[str, Any]:
         if is_user_player(player_id):
@@ -1028,12 +1205,59 @@ def _apply_acceptance_transaction(
         if buyer["coins"] < proposed_price:
             return False, "INSUFFICIENT_FUNDS", {"message": "Недостаточно денег для завершения сделки"}
 
-        ok, moved, moved_entities, clarification_reason, clarification_meta = _take_exact_item(
-            seller["inventory"],
-            cat_id=cat_id,
-            color=color,
-            sex=sex,
-        )
+        if seller["kind"] == "user":
+            removed_entity, removal_error = crud.remove_player_cat_everywhere(
+                db,
+                session.id,
+                season_number,
+                cat_id,
+                color=color,
+                sex=sex,
+            )
+            if not removed_entity:
+                clarification_reason = removal_error or "CAT_NOT_AVAILABLE"
+                if clarification_reason == "ONLY_KITTENS_CAN_BE_TRADED":
+                    _, clarification_meta = _only_kittens_trade_meta()
+                elif clarification_reason == "CAT_STATE_CHANGED":
+                    reason, meta_json = _clarification_payload(
+                        "CAT_STATE_CHANGED",
+                        unavailable_cat_ids=[cat_id] if cat_id else None,
+                        message="Котик изменил состояние и больше не подходит для сделки",
+                    )
+                    clarification_reason = reason
+                    clarification_meta = json.loads(meta_json)
+                else:
+                    reason, meta_json = _clarification_payload(
+                        clarification_reason,
+                        unavailable_cat_ids=[cat_id] if cat_id else None,
+                        message="Котёнок уже недоступен для сделки" if clarification_reason == "CAT_NOT_AVAILABLE" else "Котёнок уже продан",
+                    )
+                    clarification_reason = reason
+                    clarification_meta = json.loads(meta_json)
+                return False, clarification_reason, clarification_meta
+            removed_sex = _norm_sex(removed_entity.get("sex"))
+            moved = _make_inventory_moved(removed_sex)
+            moved_entities = [removed_entity]
+            ok = True
+            clarification_reason = None
+            clarification_meta = None
+            refreshed_inventory = crud._parse_inventory(session.inventory_json or "{}")
+            seller["inventory"] = {
+                "counts": json.loads(json.dumps(refreshed_inventory.get("counts", {}))),
+                "entities": list(refreshed_inventory.get("entities", [])),
+            }
+            if progress:
+                try:
+                    nursery_snapshot = json.loads(progress.nursery_json or "{}")
+                except Exception:
+                    nursery_snapshot = None
+        else:
+            ok, moved, moved_entities, clarification_reason, clarification_meta = _take_exact_item(
+                seller["inventory"],
+                cat_id=cat_id,
+                color=color,
+                sex=sex,
+            )
         if not ok:
             return False, clarification_reason, clarification_meta
 
@@ -1075,6 +1299,23 @@ def _apply_acceptance_transaction(
                     "entityId": cat_id or None,
                 }
             )
+            buyer_bot = _parse_bot_player(buyer_id)
+            if buyer_bot:
+                relation = _ensure_relation(
+                    db=db,
+                    session_id=session.id,
+                    player_id=seller_id,
+                    counterparty_id=buyer_id,
+                    season_number=season_number,
+                )
+                sick_count = sum(1 for entity in moved_entities if _entity_is_sick(entity))
+                if sick_count > 0:
+                    relation.relation_score = update_relation(
+                        relation.relation_score,
+                        {"type": "sick_sale", "count": sick_count},
+                    )
+                else:
+                    relation.relation_score = update_relation(relation.relation_score, {"type": "healthy_sale"})
 
     if player_ledger:
         session.inventory_json = crud._serialize_inventory(player_ledger["inventory"])
@@ -1092,7 +1333,7 @@ def _apply_acceptance_transaction(
         state = ledger["state"]
         state.coins = max(0, _safe_int(ledger["coins"], 0))
         state.inventory_json = crud._serialize_inventory(ledger["inventory"])
-        state.updated_at = datetime.utcnow()
+        state.updated_at = _utc_now()
 
     return True, None, None
 
@@ -1180,7 +1421,7 @@ def process_due_bot_responses(
     if not session:
         return []
 
-    now = datetime.utcnow()
+    now = _utc_now()
     processed: list[tuple[TradeRequest, str]] = []
     pending_requests = (
         db.query(TradeRequest)
@@ -1326,13 +1567,13 @@ def create_trade_request(
         to_player_id=to_player_id,
     )
     if is_user_player(from_player_id) and seller_player_id == from_player_id:
-        _validate_user_sell_items(session, normalized_items)
+        _validate_user_sell_items(db, session, season_number, normalized_items)
 
     expires_at = None
     ttl = None
     if ttl_seconds is not None and _safe_int(ttl_seconds) > 0:
         ttl = _safe_int(ttl_seconds)
-        expires_at = datetime.utcnow() + timedelta(seconds=ttl)
+        expires_at = _utc_now() + timedelta(seconds=ttl)
 
     req = TradeRequest(
         session_id=session.id,
@@ -1519,7 +1760,7 @@ def apply_trade_action(
             request_obj.read_by_to = True
             if is_terminal(request_obj.state):
                 request_obj.hidden_by_to = True
-        request_obj.updated_at = datetime.utcnow()
+        request_obj.updated_at = _utc_now()
         return request_obj
 
     if request_obj.next_actor_player_id and request_obj.next_actor_player_id != actor_player_id:
@@ -1614,7 +1855,7 @@ def apply_trade_action(
             raise ValueError("mixed_directions_not_allowed")
         counter_seller_player_id = _seller_player_id_from_side(request_obj, normalized_counter)
         if is_user_player(actor_player_id) and counter_seller_player_id == actor_player_id:
-            _validate_user_sell_items(session, normalized_counter)
+            _validate_user_sell_items(db, session, int(request_obj.season_number), normalized_counter)
         request_obj.state = transition_state(request_obj.state, TradeAction.COUNTER).to_state
         request_obj.next_actor_player_id = _other_party(request_obj, actor_player_id)
         request_obj.request_type = "COUNTER_REQUEST"
@@ -1650,7 +1891,7 @@ def apply_trade_action(
             raise ValueError("mixed_directions_not_allowed")
         counter_seller_player_id = _seller_player_id_from_side(request_obj, normalized_counter)
         if is_user_player(actor_player_id) and counter_seller_player_id == actor_player_id:
-            _validate_user_sell_items(session, normalized_counter)
+            _validate_user_sell_items(db, session, int(request_obj.season_number), normalized_counter)
         _archive_request_version(request_obj, message_code="CLARIFICATION_HANDLED")
         return _create_request_version(
             db,

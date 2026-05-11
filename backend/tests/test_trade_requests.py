@@ -2,8 +2,9 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
+from app import crud
 from app.models import TradeRequest
-from app.trade_bot import ShopBotState, bot_display_buy_price
+from app.trade_bot import ShopBotState, bot_display_buy_price, bot_display_sell_price
 from app.trade_requests import (
     _derive_direction,
     _derive_request_type,
@@ -15,6 +16,51 @@ from app.trade_state_machine import TradeState
 
 
 class TradeRequestsHelpersTests(unittest.TestCase):
+    def test_generate_market_prices_caps_shop_sell_to_player_in_early_seasons(self):
+        season_caps = {1: 6, 2: 7, 3: 8, 4: 9}
+        season_mins = {1: 1, 2: 3, 3: 4, 4: 5}
+
+        for season_number, max_price in season_caps.items():
+            market = crud.generate_market_prices("session-early", season_number, "shop", 1)
+            for color in ("black", "white", "gray", "ginger"):
+                self.assertGreaterEqual(market[color]["buy"], season_mins[season_number])
+                self.assertLessEqual(market[color]["buy"], max_price)
+                if season_number == 1:
+                    self.assertGreaterEqual(market[color]["buy"], market[color]["sell"])
+                else:
+                    self.assertGreater(market[color]["buy"], market[color]["sell"])
+                for sex in ("M", "F"):
+                    self.assertGreaterEqual(market[color][sex]["buy"], season_mins[season_number])
+                    self.assertLessEqual(market[color][sex]["buy"], max_price)
+                    if season_number == 1:
+                        self.assertGreaterEqual(market[color][sex]["buy"], market[color][sex]["sell"])
+                    else:
+                        self.assertGreater(market[color][sex]["buy"], market[color][sex]["sell"])
+
+    def test_generate_market_prices_season_one_biases_shop_sell_prices_toward_one_to_three(self):
+        observed = []
+        for shop_id in range(1, 8):
+            market = crud.generate_market_prices("session-early-bias", 1, "shop", shop_id)
+            for color in ("black", "white", "gray", "ginger"):
+                observed.append(int(market[color]["buy"]))
+                for sex in ("M", "F"):
+                    observed.append(int(market[color][sex]["buy"]))
+
+        lower_band = [price for price in observed if price <= 3]
+        upper_band = [price for price in observed if price > 3]
+        self.assertTrue(all(1 <= price <= 6 for price in observed))
+        self.assertGreater(len(lower_band), len(upper_band))
+
+    def test_generate_market_prices_season_five_is_not_hard_capped(self):
+        observed = []
+        for shop_id in range(1, 6):
+            market = crud.generate_market_prices("session-normal", 5, "shop", shop_id)
+            for color in ("black", "white", "gray", "ginger"):
+                observed.append(int(market[color]["buy"]))
+                for sex in ("M", "F"):
+                    observed.append(int(market[color][sex]["buy"]))
+        self.assertTrue(any(price > 9 for price in observed))
+
     def test_player_sell_request_maps_to_sell_request_and_player_to_shop(self):
         items = _parse_items(
             [
@@ -105,6 +151,10 @@ class TradeRequestsHelpersTests(unittest.TestCase):
         self.assertEqual(view["gray"]["sell"], display_price)
         self.assertEqual(view["gray"]["M"]["sell"], display_price)
         self.assertEqual(view["gray"]["F"]["sell"], display_price)
+        display_sell_price = bot_display_sell_price(bot_state, "gray")
+        self.assertEqual(view["gray"]["buy"], display_sell_price)
+        self.assertEqual(view["gray"]["M"]["buy"], display_sell_price)
+        self.assertEqual(view["gray"]["F"]["buy"], display_sell_price)
 
 
 if __name__ == "__main__":

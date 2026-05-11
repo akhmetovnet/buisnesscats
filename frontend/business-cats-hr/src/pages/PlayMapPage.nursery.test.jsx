@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildNextSeasonProgressPayload,
   buildSeasonTransition,
   normalizeNurseryCat,
   normalizeNurseryState,
@@ -85,6 +86,55 @@ describe('PlayMapPage nursery disease flow', () => {
     expect(nursery.hasHome).toBe(true)
     expect(nursery.insuranceActive).toBe(false)
     expect(nursery.insuranceNext).toBe(true)
+  })
+
+  it('resets nurseryCoinsDelta when handing off progress to the next season', () => {
+    const payload = buildNextSeasonProgressPayload({
+      nursery: {
+        coins: 16,
+        coinsSynced: false,
+        cats: [{ id: 'yard-kitten', color: 'white', sex: 'F', age: 0 }],
+        homes: [],
+        activeHomeIndex: 0,
+      },
+      adultAge: 2,
+      nextSeasonNumber: 5,
+      nextSeasonCoins: 13,
+      targetDuration: 900,
+    })
+
+    expect(payload.nursery.coins).toBe(13)
+    expect(payload.nursery.coinsSynced).toBe(true)
+    expect(payload.nurseryCoinsDelta).toBe(0)
+    expect(payload.seasonLedger).toMatchObject({
+      seasonNumber: 5,
+      startCoins: 13,
+      homeExpenses: 0,
+      feedExpenses: 0,
+      insuranceExpenses: 0,
+      treatmentExpenses: 0,
+    })
+    expect(payload.timeLeft).toBe(900)
+  })
+
+  it('does not create a home from an empty default nursery mirror', () => {
+    const nursery = normalizeNurseryState({
+      coins: 40,
+      hasHome: false,
+      insuranceActive: false,
+      insuranceNext: false,
+      home: {
+        parents: { left: [null, null], right: [null, null] },
+        kittens: Array(12).fill(null),
+        breedPending: { left: false, right: false },
+        lastBreedSeason: { left: 0, right: 0 },
+      },
+      cats: [],
+    }, 2)
+
+    expect(nursery.hasHome).toBe(false)
+    expect(nursery.homes).toHaveLength(0)
+    expect(nursery.activeHomeIndex).toBe(0)
   })
 
   it('normalizes disease defaults for old nursery_json', () => {
@@ -245,5 +295,32 @@ describe('PlayMapPage nursery disease flow', () => {
       id: 'sick-home-2',
       escapeReason: 'SICK_UNTREATED',
     })
+  })
+
+  it('activates insurance for one season and then expires it without a repurchase', () => {
+    const seasonTwo = buildSeasonTransition({
+      coins: 20,
+      cats: [],
+      homes: [
+        {
+          id: 'home-1',
+          number: 1,
+          insuranceActive: false,
+          insuranceNext: true,
+          parents: { left: [null, null], right: [null, null] },
+          kittens: Array(12).fill(null),
+          breedPending: { left: false, right: false },
+          lastBreedSeason: { left: 0, right: 0 },
+        },
+      ],
+      activeHomeIndex: 0,
+    }, 2)
+
+    expect(seasonTwo.nursery.homes[0].insuranceActive).toBe(true)
+    expect(seasonTwo.nursery.homes[0].insuranceNext).toBe(false)
+
+    const seasonThree = buildSeasonTransition(seasonTwo.nursery, 2)
+    expect(seasonThree.nursery.homes[0].insuranceActive).toBe(false)
+    expect(seasonThree.nursery.homes[0].insuranceNext).toBe(false)
   })
 })

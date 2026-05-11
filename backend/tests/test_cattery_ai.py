@@ -2,7 +2,7 @@ import unittest
 
 try:
     from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.orm import close_all_sessions, sessionmaker
 except Exception:  # pragma: no cover - local env without backend deps
     create_engine = None
     sessionmaker = None
@@ -27,6 +27,11 @@ class CatteryAITests(unittest.TestCase):
         cls.engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
         cls.Session = sessionmaker(bind=cls.engine, autocommit=False, autoflush=False)
         Base.metadata.create_all(bind=cls.engine)
+
+    @classmethod
+    def tearDownClass(cls):
+        close_all_sessions()
+        cls.engine.dispose(close=True)
 
     def setUp(self):
         self.db = self.Session()

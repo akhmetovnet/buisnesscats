@@ -7,13 +7,6 @@ const SEASON_SCHEDULE_SUMMARY = [
   { label: 'Сезон 13', value: '10 минут' },
 ]
 
-const CREDIT_RULES = [
-  'Максимальная сумма кредитования - 35 монет',
-  'Потребительский кредит - 5%',
-  'Инвестиционный кредит - 10%',
-  'Кредит со спец. условиями - 15%',
-]
-
 export default function WelcomeStartModal({
   open,
   onClose,
@@ -93,7 +86,7 @@ export default function WelcomeStartModal({
       key: 'economy',
       icon: '💸',
       title: 'Экономика сезона',
-      subtitle: 'Коммуналка, кредиты и ограничения рынка влияют на твой темп.',
+      subtitle: 'Коммуналка и ограничения рынка влияют на твой темп.',
       primaryLabel: 'Далее',
       body: (
         <div className="wizard-stack">
@@ -106,15 +99,6 @@ export default function WelcomeStartModal({
               <span className="wizard-summary-card__label">Коммуналка магазина</span>
               <strong>1 <span className="coin-icon coin" /></strong>
             </div>
-          </div>
-
-          <div className="wizard-list-card">
-            <span className="wizard-list-card__title">Кредиты</span>
-            <ul className="wizard-list">
-              {CREDIT_RULES.map((rule) => (
-                <li key={rule}>{rule}</li>
-              ))}
-            </ul>
           </div>
 
           <div className="wizard-note">

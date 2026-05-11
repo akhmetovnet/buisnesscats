@@ -105,10 +105,10 @@ export default function CompetenciesPage() {
         <section className="platform-card platform-card--active-session">
           <div className="platform-card__title">У вас есть активная сессия</div>
           <p className="platform-muted">
-            Вы уже начали прохождение Business Cats. Продолжите текущую сессию, чтобы завершить все сезоны.
+            Вы уже начали прохождение Cattary Manager. Продолжите текущую сессию, чтобы завершить все сезоны.
           </p>
           <div className="platform-form-grid platform-form-grid--session">
-            <div><b>Симуляция:</b> Business Cats</div>
+            <div><b>Симуляция:</b> Cattary Manager</div>
             <div><b>Статус:</b> Активна</div>
             <div><b>Роль:</b> {activeSession.role === 'petshop' ? 'Магазин' : 'Питомник'}</div>
             <div><b>Начата:</b> {formatDateTime(activeSession.startedAt)}</div>

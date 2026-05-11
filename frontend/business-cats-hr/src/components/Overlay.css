@@ -44,8 +44,7 @@
   background:
     linear-gradient(180deg, rgba(236, 243, 251, 0.98), rgba(217, 231, 244, 0.98)),
     radial-gradient(circle at 25% 16%, rgba(255, 255, 255, 0.6), transparent 46%);
-  overflow-y: hidden;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .trade-screen {
@@ -130,6 +129,36 @@
   line-height: var(--line-height-hud);
   font-weight: var(--font-weight-medium);
   color: var(--color-primary-blue-dark);
+}
+
+.trade-title__trust {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  font-weight: var(--font-weight-semibold);
+  background: rgba(24, 140, 84, 0.12);
+  color: #1e7b3f;
+}
+
+.trade-title__trust--good {
+  background: rgba(24, 140, 84, 0.12);
+  color: #1e7b3f;
+}
+
+.trade-title__trust--warn {
+  background: rgba(210, 170, 22, 0.16);
+  color: #8a6500;
+}
+
+.trade-title__trust--caution {
+  background: rgba(214, 118, 22, 0.16);
+  color: #9a4f00;
+}
+
+.trade-title__trust--bad {
+  background: rgba(192, 51, 63, 0.14);
+  color: #a22d37;
 }
 
 .trade-header__status {

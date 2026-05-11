@@ -4,10 +4,14 @@ import asyncio
 import json
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import WebSocket
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 @dataclass
@@ -40,11 +44,12 @@ class TradeRealtimeHub:
         payload: dict[str, Any],
         target_user_ids: set[str] | None = None,
     ) -> None:
+        now = _utc_now()
         event = {
-            "eventId": f"ev-{datetime.utcnow().timestamp():.6f}",
+            "eventId": f"ev-{now.timestamp():.6f}",
             "eventType": event_type,
             "sessionId": session_id,
-            "sentAt": datetime.utcnow().isoformat(),
+            "sentAt": now.isoformat(),
             "payload": payload,
         }
         message = json.dumps(event, ensure_ascii=False)

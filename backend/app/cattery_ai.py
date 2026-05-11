@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import random
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -46,6 +46,10 @@ ARCHETYPE_KEEP_RATIO = {
     "RISK_MANAGER": 0.42,
     "HIGH_ROLLER": 0.35,
 }
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 @dataclass(frozen=True)
@@ -277,7 +281,7 @@ def _simulate_single_bot(comp: CatteryCompetitor, season_number: int) -> None:
     comp.deals_this_season = deals
     comp.avg_sell_price_this_season = float(round(avg_price, 2))
     comp.last_deal_at = (
-        datetime.utcnow() - timedelta(seconds=rnd.randint(5, 240))
+        _utc_now() - timedelta(seconds=rnd.randint(5, 240))
         if deals > 0
         else None
     )
@@ -340,7 +344,7 @@ def advance_competitors_for_season(db: Session, session_id: str, season_number: 
             continue
         for step in range(comp.season_number + 1, season_number + 1):
             _simulate_single_bot(comp, season_number=step)
-        comp.updated_at = datetime.utcnow()
+        comp.updated_at = _utc_now()
     db.flush()
 
 
@@ -373,7 +377,7 @@ def get_public_spectate_view(
     except Exception:
         catalog = []
 
-    now = datetime.utcnow()
+    now = _utc_now()
     last_deal_seconds = None
     if comp.last_deal_at:
         last_deal_seconds = max(0, int((now - comp.last_deal_at).total_seconds()))
@@ -389,4 +393,3 @@ def get_public_spectate_view(
         "lastDealSecondsAgo": last_deal_seconds,
         "avgSellPriceThisSeason": float(comp.avg_sell_price_this_season or 0.0),
     }
-

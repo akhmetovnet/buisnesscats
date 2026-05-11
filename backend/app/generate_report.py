@@ -40,7 +40,7 @@ def generate_competency_report(
     y = height - 20 * mm
 
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(left, y, "Business Cats — Отчёт компетенций кандидата")
+    c.drawString(left, y, "Cattary Manager — Отчёт компетенций кандидата")
     y -= 10 * mm
 
     c.setFont("Helvetica-Bold", 12)

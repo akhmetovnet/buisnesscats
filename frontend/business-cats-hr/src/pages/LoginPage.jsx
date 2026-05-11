@@ -228,8 +228,8 @@ export default function LoginPage({ onAuthenticated }) {
   return (
     <div className="auth-layout">
       <section className="auth-brand">
-        <div className="auth-brand__badge">Business Cats</div>
-        <h1>Business Cats Platform</h1>
+        <div className="auth-brand__badge">Cattary Manager</div>
+        <h1>Cattary Manager Platform</h1>
         <p>{lang === 'EN' ? 'Play, trade, and grow your cattery.' : 'Играйте, торгуйте и развивайте свой питомник.'}</p>
       </section>
 

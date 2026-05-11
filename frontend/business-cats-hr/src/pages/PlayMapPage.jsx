@@ -556,6 +556,18 @@ const clampHomeIndex = (value, totalHomes) => {
   return Math.min(count - 1, Math.max(0, Math.floor(normalized)))
 }
 
+const hasLegacyHomeState = (home) => {
+  if (!home || typeof home !== 'object') return false
+  const leftParents = Array.isArray(home?.parents?.left) ? home.parents.left : []
+  const rightParents = Array.isArray(home?.parents?.right) ? home.parents.right : []
+  const kittens = Array.isArray(home?.kittens) ? home.kittens : []
+  if (leftParents.some((id) => id != null) || rightParents.some((id) => id != null)) return true
+  if (kittens.some(Boolean)) return true
+  if (Boolean(home?.breedPending?.left) || Boolean(home?.breedPending?.right)) return true
+  if (Number(home?.lastBreedSeason?.left) > 0 || Number(home?.lastBreedSeason?.right) > 0) return true
+  return false
+}
+
 const withNurseryHomeMirrors = (nursery) => {
   const base = createDefaultNursery()
   const source = nursery && typeof nursery === 'object' ? nursery : {}
@@ -606,6 +618,31 @@ const normalizeSeasonLedger = (rawLedger, seasonNumber, fallbackStartCoins = 0) 
     feedExpenses: Math.max(0, Number(rawLedger.feedExpenses) || 0),
     insuranceExpenses: Math.max(0, Number(rawLedger.insuranceExpenses) || 0),
     treatmentExpenses: Math.max(0, Number(rawLedger.treatmentExpenses) || 0),
+  }
+}
+
+export const buildNextSeasonProgressPayload = ({
+  nursery,
+  adultAge = DEFAULT_ADULT_AGE,
+  nextSeasonNumber,
+  nextSeasonCoins,
+  targetDuration,
+}) => {
+  const normalizedCoins = Math.max(0, Number(nextSeasonCoins) || 0)
+  const normalizedSeason = normalizeSeasonNumber(nextSeasonNumber, 1)
+  const normalizedNursery = normalizeNurseryState(
+    {
+      ...normalizeNurseryState(nursery, adultAge),
+      coins: normalizedCoins,
+      coinsSynced: true,
+    },
+    adultAge
+  )
+  return {
+    nursery: normalizedNursery,
+    seasonLedger: createDefaultSeasonLedger(normalizedSeason, normalizedCoins),
+    nurseryCoinsDelta: 0,
+    timeLeft: targetDuration,
   }
 }
 
@@ -807,7 +844,12 @@ export const normalizeNurseryState = (rawNursery, adultAge = DEFAULT_ADULT_AGE) 
   const sourceHomes =
     Array.isArray(rawNursery.homes) && rawNursery.homes.length
       ? rawNursery.homes
-      : Boolean(rawNursery.hasHome || rawNursery.home || rawNursery.insuranceActive || rawNursery.insuranceNext)
+      : Boolean(
+          rawNursery.hasHome ||
+          rawNursery.insuranceActive ||
+          rawNursery.insuranceNext ||
+          hasLegacyHomeState(rawNursery.home)
+        )
         ? [
             {
               ...(rawNursery.home && typeof rawNursery.home === 'object' ? rawNursery.home : {}),
@@ -851,8 +893,14 @@ const formatTradeRequestError = (value) => {
   if (code === 'ONLY_KITTENS_CAN_BE_TRADED') {
     return 'Продавать можно только котят'
   }
-  if (code === 'SICK_KITTENS_CANNOT_BE_TRADED') {
-    return 'Больных котят нельзя продавать'
+  if (code === 'CAT_NOT_AVAILABLE') {
+    return 'Котёнок уже недоступен для сделки'
+  }
+  if (code === 'CAT_ALREADY_SOLD') {
+    return 'Котёнок уже продан'
+  }
+  if (code === 'BAD_RELATION' || code === 'LOW_TRUST' || code === 'NO_RELATION') {
+    return 'Магазин не доверяет вам и отказывается покупать котят'
   }
   return String(value ?? '')
 }
@@ -1198,7 +1246,7 @@ export default function PlayMapPage({ me }) {
     )
     nurseryEntities.forEach((entity) => {
       const entityId = entity?.id == null ? null : String(entity.id)
-      if (!entityId || mergedIds.has(entityId) || !entityId.startsWith('born-')) return
+      if (!entityId || mergedIds.has(entityId)) return
       merged.push(entity)
     })
     return merged
@@ -1340,6 +1388,26 @@ export default function PlayMapPage({ me }) {
     playAccessDenied,
   ])
 
+  const refreshPersistedNursery = useCallback(async () => {
+    if (!sessionId || !playAccessResolved || playAccessDenied) return
+    try {
+      const response = await api.getProgress(sessionId, season)
+      if (!response?.found || !response?.progress?.nursery) return
+      setNursery(normalizeNurseryState(response.progress.nursery, adultAge))
+    } catch (err) {
+      if (handleInactivityTimeoutError(err)) return
+      if (handleTerminalSessionError(err)) return
+    }
+  }, [
+    sessionId,
+    season,
+    adultAge,
+    handleInactivityTimeoutError,
+    handleTerminalSessionError,
+    playAccessResolved,
+    playAccessDenied,
+  ])
+
   const loadTradeRequests = useCallback(async () => {
     if (!sessionId || !playAccessResolved || playAccessDenied) return
     try {
@@ -1389,8 +1457,7 @@ export default function PlayMapPage({ me }) {
     try {
       socket = new WebSocket(api.tradeRequestsWsUrl(sessionId))
       socket.onmessage = () => {
-        loadTradeRequests()
-        loadData()
+        void Promise.allSettled([loadTradeRequests(), loadData(), refreshPersistedNursery()])
       }
     } catch {
       return
@@ -1398,7 +1465,7 @@ export default function PlayMapPage({ me }) {
     return () => {
       if (socket && socket.readyState <= 1) socket.close()
     }
-  }, [sessionId, loadTradeRequests, loadData])
+  }, [sessionId, loadTradeRequests, loadData, refreshPersistedNursery])
 
   useEffect(() => {
     if (!sessionId) return
@@ -1411,8 +1478,7 @@ export default function PlayMapPage({ me }) {
     if (!shouldPollTradeState) return
 
     const timerId = window.setInterval(() => {
-      loadTradeRequests()
-      loadData()
+      void Promise.allSettled([loadTradeRequests(), loadData(), refreshPersistedNursery()])
     }, 2500)
 
     return () => {
@@ -1426,6 +1492,7 @@ export default function PlayMapPage({ me }) {
     activeTradeSendRequest,
     loadTradeRequests,
     loadData,
+    refreshPersistedNursery,
   ])
 
   useEffect(() => {
@@ -1743,8 +1810,7 @@ export default function PlayMapPage({ me }) {
                 resolveKittenStatus(cat, adultAge) &&
                 !assigned.has(cat.id) &&
                 !cat.locked &&
-                !cat.hungry &&
-                !isNurseryCatSick(cat)
+                !cat.hungry
               if (sellableKitten && colorMatch && sexMatch) {
                 remaining -= 1
                 return null
@@ -1760,8 +1826,7 @@ export default function PlayMapPage({ me }) {
               resolveKittenStatus(cat, adultAge) &&
               !assigned.has(cat.id) &&
               !cat.locked &&
-              !cat.hungry &&
-              !isNurseryCatSick(cat)
+              !cat.hungry
             if (remaining > 0 && sellableKitten && colorMatch && sexMatch) {
               remaining -= 1
               return
@@ -1777,6 +1842,8 @@ export default function PlayMapPage({ me }) {
         return prev
       })
       await loadData()
+      await refreshPersistedNursery()
+      await refreshPersistedNursery()
     } catch (err) {
       if (handleInactivityTimeoutError(err)) return
       if (handleTerminalSessionError(err)) return
@@ -1811,7 +1878,7 @@ export default function PlayMapPage({ me }) {
         throw new Error(formatTradeRequestError(err?.message || err))
       }
     },
-    [sessionId, season, loadTradeRequests, loadData, handleInactivityTimeoutError, handleTerminalSessionError]
+    [sessionId, season, loadTradeRequests, loadData, refreshPersistedNursery, handleInactivityTimeoutError, handleTerminalSessionError]
   )
 
   const handleOpenRequest = useCallback((request) => {
@@ -1848,6 +1915,7 @@ export default function PlayMapPage({ me }) {
         }
         await loadTradeRequests()
         await loadData()
+        await refreshPersistedNursery()
       } catch (err) {
         if (handleInactivityTimeoutError(err)) {
           setActiveRequest(null)
@@ -1868,6 +1936,7 @@ export default function PlayMapPage({ me }) {
       season,
       loadTradeRequests,
       loadData,
+      refreshPersistedNursery,
       handleInactivityTimeoutError,
       handleTerminalSessionError,
       isCurrentSessionRequest,
@@ -2028,17 +2097,17 @@ export default function PlayMapPage({ me }) {
   }
 
   const persistProgressForSeason = useCallback(
-    async (targetSeason) => {
+    async (targetSeason, targetCoins = null) => {
       if (!sessionId || !Number.isFinite(Number(targetSeason))) return
       const normalizedSeason = Number(targetSeason)
       const targetDuration = SEASON_SECONDS[normalizedSeason] || 300
-      const nextStartCoins = normalizeNurseryState(nursery, adultAge).coins
-      const nextPayload = {
-        nursery: normalizeNurseryState(nursery, adultAge),
-        seasonLedger: createDefaultSeasonLedger(normalizedSeason, nextStartCoins),
-        nurseryCoinsDelta,
-        timeLeft: targetDuration,
-      }
+      const nextPayload = buildNextSeasonProgressPayload({
+        nursery,
+        adultAge,
+        nextSeasonNumber: normalizedSeason,
+        nextSeasonCoins: targetCoins ?? normalizeNurseryState(nursery, adultAge).coins,
+        targetDuration,
+      })
       const targetStorageKey = `bc_play_progress_${sessionId}_${normalizedSeason}`
 
       if (typeof window !== 'undefined') {
@@ -2057,18 +2126,19 @@ export default function PlayMapPage({ me }) {
         // local storage already has the handoff state
       }
     },
-    [sessionId, nursery, seasonLedger, season, coinsNow, nurseryCoinsDelta, SEASON_SECONDS, adultAge]
+    [sessionId, nursery, SEASON_SECONDS, adultAge]
   )
 
   const continueAfterSeasonResult = useCallback(
     async (transition) => {
       const next = transition?.next ?? null
       const coinsEnd = Number(transition?.coinsEnd ?? 0)
+      const nextCoins = Number(transition?.nextCoins ?? coinsEnd)
       const terminal = Boolean(transition?.terminal)
       const completionReason = String(transition?.completionReason || '').toUpperCase()
       if (!terminal && coinsEnd > 0) {
         if (next) {
-          await persistProgressForSeason(next)
+          await persistProgressForSeason(next, nextCoins)
           navigate(`/play/${sessionId}/${next}`)
           return
         }
@@ -2092,6 +2162,12 @@ export default function PlayMapPage({ me }) {
     setAutoFinishing(false)
     const transition = {
       next: seasonResult?.nextSeason?.number ?? null,
+      nextCoins: Number(
+        seasonResult?.nextSeason?.coins ??
+        seasonResult?.seasonResult?.coinsEnd ??
+        seasonResult?.seasonResult?.coins_end ??
+        0
+      ),
       coinsEnd: Number(
         seasonResult?.seasonResult?.coinsEnd ??
         seasonResult?.seasonResult?.coins_end ??
@@ -2161,7 +2237,6 @@ export default function PlayMapPage({ me }) {
 
         <div className="mapLabel mapLabelShops">Зоомагазины</div>
         <div className="mapLabel mapLabelCatteries">Питомники</div>
-
         {PETSHOPS.map((shop) => (
           <button
             className="mapBuilding shopBuilding"
@@ -2246,6 +2321,7 @@ export default function PlayMapPage({ me }) {
         tradeRequests={tradeRequests}
         onOpenRequest={handleOpenRequest}
         adultAge={adultAge}
+        shopTrustPercent={state?.shopTrustPercent ?? null}
       />
 
       <CatteryOverlay

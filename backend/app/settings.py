@@ -29,7 +29,7 @@ class AppSettings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: str | None = None
     SMTP_PASS: str | None = None
-    SMTP_FROM: str = 'Business Cats <noreply@businesscats.local>'
+    SMTP_FROM: str = 'Cattary Manager <noreply@businesscats.local>'
 
     AUTH_LOCKOUT_MINUTES: int = 10
 

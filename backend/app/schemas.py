@@ -146,6 +146,7 @@ class GameStateOut(BaseModel):
     market: dict
     inventory: dict
     inventoryEntities: list[dict] = []
+    shopTrustPercent: int | None = None
     coinsNowEstimate: int
     debtTotal: int
     debtRate: float

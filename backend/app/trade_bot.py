@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 BOT_RESPONSE_DELAY_MS_MIN = 1000
@@ -110,6 +110,7 @@ class ShopBotState:
     expectedResaleValueByType: dict[str, int]
     recentAcceptedPricesByType: dict[str, list[int]]
     pendingRequestsCount: int
+    shopSellPriceByType: dict[str, int] = field(default_factory=dict)
     archetype: str = "MARKET"
 
 
@@ -140,8 +141,13 @@ def update_relation(current_score: float, event: dict[str, Any]) -> float:
 
     if event_type == "price_ok":
         score += 0.2
+    elif event_type == "healthy_sale":
+        score += 0.2
     elif event_type == "counter_accepted":
         score += 0.15
+    elif event_type == "sick_sale":
+        count = max(1, int(event.get("count") or 1))
+        score -= 2.5 * count
     elif event_type == "overpriced":
         ratio = float(event.get("ratio") or 0.0)
         if ratio >= 0.50:
@@ -247,6 +253,23 @@ def bot_display_buy_price(bot_state: ShopBotState, cat_type: str) -> int:
 
 def bot_min_accept_price(bot_state: ShopBotState, cat_type: str) -> int:
     return int(bot_pricing_snapshot(bot_state, cat_type)["minAcceptablePrice"])
+
+
+def bot_display_sell_price(bot_state: ShopBotState, cat_type: str) -> int:
+    base_display_sell_price = max(0, int(bot_state.shopSellPriceByType.get(cat_type, 0)))
+    if base_display_sell_price > 0:
+        return base_display_sell_price
+    expected_resale_value = bot_market_value(bot_state, cat_type)
+    relation_factor = _relation_factor(bot_state.relationScoreToPlayer)
+    stock = max(0, int(bot_state.inventoryByType.get(cat_type, 0)))
+    sell_raw = expected_resale_value * _clamp(
+        1.08
+        - (relation_factor - 0.8) * 0.15
+        + max(0, stock - 3) * 0.03,
+        0.92,
+        1.20,
+    )
+    return max(1, round_to_nice_value(sell_raw))
 
 
 def _price_limit(base_price: int, multiplier: float) -> int:
@@ -410,21 +433,7 @@ def botEvaluateOffer(
         )
 
     if side == "BUY":
-        min_sell_price = max(
-            1,
-            int(
-                round(
-                    expected_resale_value
-                    * _clamp(
-                        1.08
-                        - (_relation_factor(bot_state.relationScoreToPlayer) - 0.8) * 0.15
-                        + max(0, stock - 3) * 0.03,
-                        0.92,
-                        1.20,
-                    )
-                )
-            ),
-        )
+        min_sell_price = bot_display_sell_price(bot_state, cat_type)
         if proposed_price >= int(min_sell_price * 1.05):
             return BotOfferEvaluationResult(
                 decision="ACCEPT",

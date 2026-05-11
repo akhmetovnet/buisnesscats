@@ -25,7 +25,7 @@ export default function PlatformLayout({ me, onLogout }) {
     <div className="platform-shell">
       <header className="platform-topbar">
         <button className="platform-logo" type="button" onClick={() => navigate('/competencies')}>
-          <span className="platform-logo__mark">Business Cats</span>
+          <span className="platform-logo__mark">Cattary Manager</span>
         </button>
 
         <nav className="platform-nav">

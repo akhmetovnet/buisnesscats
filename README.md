@@ -1,4 +1,4 @@
-# Business Cats
+# Cattary Manager
 
 Полный стек проекта:
 - `backend/` — FastAPI + SQLAlchemy (SQLite)

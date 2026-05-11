@@ -61,6 +61,12 @@ const SEX_LABEL_RU = {
   M: 'мальчик',
   F: 'девочка',
 }
+const DISEASE_LABEL_RU = {
+  RINGWORM: 'Стригущий лишай',
+  FLEAS: 'Блохи',
+  POISONING: 'Отравление',
+  BROKEN_PAW: 'Поврежденная лапа',
+}
 const MAX_TRADE_PRICE = 999
 const DEFAULT_ADULT_AGE = 2
 
@@ -106,8 +112,14 @@ const formatTradeRequestError = (value) => {
   if (code === 'ONLY_KITTENS_CAN_BE_TRADED') {
     return 'Продавать можно только котят'
   }
-  if (code === 'SICK_KITTENS_CANNOT_BE_TRADED') {
-    return 'Больных котят нельзя продавать'
+  if (code === 'CAT_NOT_AVAILABLE') {
+    return 'Котёнок уже недоступен для сделки'
+  }
+  if (code === 'CAT_ALREADY_SOLD') {
+    return 'Котёнок уже продан'
+  }
+  if (code === 'BAD_RELATION' || code === 'LOW_TRUST' || code === 'NO_RELATION') {
+    return 'Магазин не доверяет вам и отказывается покупать котят'
   }
   return String(value ?? '')
 }
@@ -209,6 +221,14 @@ const isEntitySick = (entity) => {
   return ['RINGWORM', 'FLEAS', 'POISONING', 'BROKEN_PAW'].includes(diseaseType)
 }
 
+const getEntityDiseaseLabel = (entity) => {
+  if (!isEntitySick(entity)) return null
+  const diseaseType = String(entity?.diseaseType ?? entity?.sick ?? '')
+    .trim()
+    .toUpperCase()
+  return DISEASE_LABEL_RU[diseaseType] || 'Болен'
+}
+
 function CatTile({
   cat,
   count,
@@ -238,21 +258,21 @@ function CatTile({
       <span className="cat-card__image">
         <img src={imageSrc} alt="котик" />
       </span>
-      <div className="cat-card__title">{title || `${cat.type} ${sexLabel || ''}`}</div>
+      <div className="cat-card__title">{title || `${cat.type}`}</div>
       <div className="cat-card__meta-row">
         <span className="cat-card__stage">{stageLabel}</span>
         {statusLabel ? <span className="cat-card__status">{statusLabel}</span> : null}
       </div>
       <div className="cat-card__price-wrapper">
         <div className="cat-card__price">
-          <div className="cat-card__price-name">Покупка</div>
+          <div className="cat-card__price-name">Покупает</div>
           <div className="price-value">
             <span className="coin" />
             <span className="price-value__cost notranslate">{cat.sell}</span>
           </div>
         </div>
         <div className="cat-card__price">
-          <div className="cat-card__price-name">Продажа</div>
+          <div className="cat-card__price-name">Продаёт</div>
           <div className="price-value">
             <span className="coin" />
             <span className="price-value__cost notranslate">{cat.buy}</span>
@@ -333,6 +353,7 @@ export default function MarketOverlay({
   spectateMode = false,
   spectateData = null,
   adultAge = DEFAULT_ADULT_AGE,
+  shopTrustPercent = null,
 }) {
   const items = useMemo(() => {
     const keys = Object.keys(market || {})
@@ -437,7 +458,7 @@ export default function MarketOverlay({
       normalizedEntities.filter((entity) => {
         const color = normalizeColor(entity?.color ?? entity?.catType)
         const kitten = resolveKittenStatus(entity, adultAge)
-        return DEFAULT_TYPES.includes(color) && kitten === true && !isEntitySick(entity)
+        return DEFAULT_TYPES.includes(color) && kitten === true
       }),
     [normalizedEntities, adultAge]
   )
@@ -471,8 +492,16 @@ export default function MarketOverlay({
           ownPrices[color]?.sell ??
           getMarketSidePrice(market, color, sex, 'sell'),
         strict: true,
+        sickCount: 0,
+        diseaseLabel: null,
       }
       current.count += 1
+      if (isEntitySick(entity)) {
+        current.sickCount += 1
+        if (!current.diseaseLabel) {
+          current.diseaseLabel = getEntityDiseaseLabel(entity)
+        }
+      }
       if (!isEntityHungry(entity)) {
         current.readyCount += 1
         if (entityId) {
@@ -543,11 +572,14 @@ export default function MarketOverlay({
           .map((item) => String(item.entityId))
       )
       const candidates = Array.isArray(entityIds) ? entityIds.map((id) => String(id)) : []
+      if (pickedEntityId && usedEntityIds.has(String(pickedEntityId))) {
+        pickedEntityId = null
+      }
       if (!pickedEntityId) {
         pickedEntityId = candidates.find((id) => !usedEntityIds.has(id)) || null
       }
       if (!pickedEntityId) {
-        setTradeValidationError('Нельзя добавить одного и того же котенка дважды')
+        setTradeValidationError('Все доступные котята этой группы уже добавлены в сделку')
         return
       }
     }
@@ -651,9 +683,6 @@ export default function MarketOverlay({
     }
     if (payload?.readyToSell === false) {
       return 'Голодного котёнка нельзя продать: сначала покормите его'
-    }
-    if (isEntitySick(payload)) {
-      return 'Больных котят нельзя продавать'
     }
     return null
   }
@@ -826,7 +855,20 @@ export default function MarketOverlay({
 
   const handleTake = () => onCreditTake(creditType, toQty(creditAmount))
   const handleRepay = () => onCreditRepay(toQty(creditAmount))
-  const tradeErrors = [error, tradeValidationError].filter(Boolean)
+  const tradeErrors = [error ? formatTradeRequestError(error) : '', tradeValidationError].filter(Boolean)
+  const normalizedTrustPercent = Number.isFinite(Number(shopTrustPercent))
+    ? Math.max(0, Math.min(100, Number(shopTrustPercent)))
+    : null
+  const trustTone =
+    normalizedTrustPercent == null
+      ? null
+      : normalizedTrustPercent >= 80
+      ? 'good'
+      : normalizedTrustPercent >= 50
+      ? 'warn'
+      : normalizedTrustPercent >= 20
+      ? 'caution'
+      : 'bad'
 
   if (!open) return null
 
@@ -844,6 +886,11 @@ export default function MarketOverlay({
                 <div className="trade-title__name">{titleName}</div>
                 <div className="trade-title__type">{titleType}</div>
                 <div className="trade-title__season">Сезон {seasonNumber}</div>
+                {overlayType === 'shop' && normalizedTrustPercent != null ? (
+                  <div className={`trade-title__trust trade-title__trust--${trustTone}`}>
+                    Доверие: {normalizedTrustPercent}%
+                  </div>
+                ) : null}
               </div>
 
               <div className="trade-header__status">
@@ -877,9 +924,6 @@ export default function MarketOverlay({
                 <span className="trade-balance__value">{coinsNow}</span>
               </div>
 
-              <button className="trade-icon" onClick={() => setCreditOpen(true)}>
-                💳
-              </button>
             </div>
 
             {tradeErrors.length ? (
@@ -918,7 +962,7 @@ export default function MarketOverlay({
                       disabled={!canBuy && !spectateMode}
                       imageSrc={getCatSprite(cat.type, cat.sex)}
                       sexLabel={cat.sex === 'M' ? 'мальчик' : 'девочка'}
-                      title={`${resolveColorLabel(cat.type)} ${resolveSexLabel(cat.sex)}`}
+                      title={resolveColorLabel(cat.type)}
                       stageLabel="котенок"
                       statusLabel={spectateMode && Number(cat.qty || 0) <= 0 ? 'нет в наличии' : null}
                       onDragStart={(e) => {
@@ -1132,7 +1176,15 @@ export default function MarketOverlay({
                         }
                         title={`${resolveColorLabel(displayType)} ${resolveSexLabel(tile.sex) || ''}`.trim()}
                         stageLabel="котенок"
-                        statusLabel={tile.count > tile.readyCount ? 'есть голодные' : null}
+                        statusLabel={
+                          tile.sickCount > 0
+                            ? tile.sickCount === 1 && tile.count === 1
+                              ? `Болен: ${tile.diseaseLabel || 'неизвестно'}`
+                              : `Больные: ${tile.sickCount}`
+                            : tile.count > tile.readyCount
+                            ? 'есть голодные'
+                            : null
+                        }
                         onDragStart={(e) => {
                           if (disabled) return
                           const payload = {
@@ -1192,7 +1244,6 @@ export default function MarketOverlay({
           </div>
         </div>
       </div>
-
       <CreditOverlay
         open={creditOpen}
         onClose={() => setCreditOpen(false)}

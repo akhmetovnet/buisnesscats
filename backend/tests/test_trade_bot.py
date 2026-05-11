@@ -261,11 +261,17 @@ class TradeBotTests(unittest.TestCase):
         score = update_relation(score, {"type": "price_ok"})
         self.assertGreaterEqual(score, 5.0)
 
+        healthy_score = update_relation(4.0, {"type": "healthy_sale"})
+        self.assertAlmostEqual(healthy_score, 4.2, places=6)
+
         score = update_relation(score, {"type": "overpriced", "ratio": 0.30})
         self.assertLess(score, 5.1)
 
         score2 = update_relation(1.0, {"type": "overpriced", "ratio": 0.60})
         self.assertAlmostEqual(score2, 0.0, places=6)
+
+        sick_score = update_relation(5.0, {"type": "sick_sale", "count": 2})
+        self.assertAlmostEqual(sick_score, 0.0, places=6)
 
 
 if __name__ == "__main__":

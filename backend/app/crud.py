@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from .models import User, CandidateProfile
@@ -19,7 +19,7 @@ def create_demo_user(db: Session, role: str, full_name: str) -> User:
         user_id=user.id,
         full_name=full_name if role == "candidate" else "",
         skills_json="[]",
-        updated_at=datetime.utcnow(),
+        updated_at=_utc_now(),
     )
     db.add(profile)
 
@@ -44,7 +44,7 @@ def update_profile(db: Session, user_id: str, data: dict) -> CandidateProfile:
     profile.program = data["program"]
     profile.study_year = data["studyYear"]
     profile.skills_json = json.dumps(data.get("skills", []), ensure_ascii=False)
-    profile.updated_at = datetime.utcnow()
+    profile.updated_at = _utc_now()
 
     db.commit()
     db.refresh(profile)
@@ -61,6 +61,10 @@ from .game_config import (
     CONFIG_START_PRODUCTION_MODE,
 )
 from .cattery_ai import ensure_competitors_for_session, advance_competitors_for_season
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 START_COINS = CONFIG_START_COINS
 SEASONS_TOTAL = 13
@@ -88,6 +92,92 @@ SEASON_SECONDS = {
 CAT_TYPES = ["black", "white", "ginger", "gray"]
 CAT_SEXES = ["M", "F"]
 COUNTERPARTY_TYPES = {"shop", "cattery"}
+
+EARLY_SHOP_SELL_PRICE_BY_SEASON = {
+    1: {"min": 1, "max": 6, "preferredMax": 3, "preferredWeight": 12},
+    2: {"min": 3, "max": 7},
+    3: {"min": 4, "max": 8},
+    4: {"min": 5, "max": 9},
+}
+
+EARLY_SHOP_BUYBACK_PRICE_BY_SEASON = {
+    1: {"min": 1, "max": 2, "preferredMax": 1, "preferredWeight": 6},
+}
+
+
+def _early_shop_sell_price_bounds(season_number: int) -> dict[str, int] | None:
+    bounds = EARLY_SHOP_SELL_PRICE_BY_SEASON.get(_safe_int(season_number, 0))
+    if not bounds:
+        return None
+    min_price = max(1, _safe_int(bounds.get("min"), 1))
+    max_price = max(min_price, _safe_int(bounds.get("max"), min_price))
+    return {"min": min_price, "max": max_price}
+
+
+def _early_shop_buyback_price_bounds(season_number: int) -> dict[str, int] | None:
+    explicit_bounds = EARLY_SHOP_BUYBACK_PRICE_BY_SEASON.get(_safe_int(season_number, 0))
+    if explicit_bounds:
+        min_price = max(1, _safe_int(explicit_bounds.get("min"), 1))
+        max_price = max(min_price, _safe_int(explicit_bounds.get("max"), min_price))
+        return {
+            "min": min_price,
+            "max": max_price,
+            "preferredMax": max(min_price, _safe_int(explicit_bounds.get("preferredMax"), min_price)),
+            "preferredWeight": max(1, _safe_int(explicit_bounds.get("preferredWeight"), 1)),
+        }
+    bounds = _early_shop_sell_price_bounds(season_number)
+    if not bounds:
+        return None
+    min_price = max(1, bounds["min"] - 1)
+    max_price = max(min_price, bounds["max"] - 1)
+    return {"min": min_price, "max": max_price}
+
+
+def _pick_weighted_price(
+    rnd: random.Random,
+    *,
+    bounds: dict[str, int] | None,
+    minimum_allowed: int,
+) -> int:
+    if not bounds:
+        return minimum_allowed
+    lower_bound = max(minimum_allowed, bounds["min"])
+    upper_bound = max(lower_bound, bounds["max"])
+    candidates = list(range(lower_bound, upper_bound + 1))
+    preferred_max = max(lower_bound, _safe_int(bounds.get("preferredMax"), lower_bound))
+    preferred_weight = max(1, _safe_int(bounds.get("preferredWeight"), 1))
+    weighted_candidates: list[int] = []
+    for value in candidates:
+        weight = preferred_weight if value <= preferred_max else 1
+        weighted_candidates.extend([value] * weight)
+    return rnd.choice(weighted_candidates or candidates)
+
+
+def _pick_season_one_shop_sell_price(
+    rnd: random.Random,
+    *,
+    minimum_allowed: int,
+    upper_bound: int,
+) -> int:
+    lower_bound = max(1, minimum_allowed)
+    upper_bound = max(lower_bound, upper_bound)
+
+    low_band = list(range(lower_bound, min(3, upper_bound) + 1)) if lower_bound <= 3 else []
+    mid_band = list(range(max(lower_bound, 4), min(5, upper_bound) + 1)) if upper_bound >= 4 else []
+    high_band = list(range(max(lower_bound, 6), upper_bound + 1)) if upper_bound >= 6 else []
+
+    roll = rnd.random()
+    if low_band and roll < 0.78:
+        return rnd.choice(low_band)
+    if mid_band and roll < 0.94:
+        return rnd.choice(mid_band)
+    if high_band:
+        return rnd.choice(high_band)
+    if mid_band:
+        return rnd.choice(mid_band)
+    if low_band:
+        return rnd.choice(low_band)
+    return lower_bound
 
 
 def _build_start_inventory_for_player(role: str, seed: str) -> dict:
@@ -152,8 +242,8 @@ def start_game_session(db: Session, user_id: str) -> GameSession:
     else:
         role = CONFIG_ROLE_PLAYER
 
-    start_inventory = _build_start_inventory_for_player(role=role, seed=f"{user_id}:{datetime.utcnow().isoformat()}")
-    now = datetime.utcnow()
+    start_inventory = _build_start_inventory_for_player(role=role, seed=f"{user_id}:{_utc_now().isoformat()}")
+    now = _utc_now()
     session = GameSession(
         user_id=user_id,
         assigned_role=role,
@@ -258,7 +348,7 @@ def finish_season(
     season.coins_end = coins_end
     season.profit = coins_end - coins_start
     season.bot_coins_end = bot_end
-    season.ended_at = datetime.utcnow()
+    season.ended_at = _utc_now()
     
     next_season = None
     if coins_end > 0 and season_number < SEASONS_TOTAL:
@@ -305,7 +395,7 @@ def finish_session(db: Session, session_id: str) -> GameSession:
 
     last_season = db.query(Season).filter(Season.session_id == session_id).order_by(Season.season_number.desc()).first()
     session.status = "finished"
-    session.finished_at = datetime.utcnow()
+    session.finished_at = _utc_now()
     session.result_coins_player = last_season.coins_end if last_season else START_COINS
     session.result_coins_bot = last_season.bot_coins_end if last_season else START_COINS
 
@@ -627,20 +717,63 @@ def generate_market_prices(
         by_sex: dict[str, dict] = {}
         buy_values: list[int] = []
         sell_values: list[int] = []
+        early_sell_bounds = _early_shop_sell_price_bounds(season_number) if cp_type == "shop" else None
+        early_buyback_bounds = _early_shop_buyback_price_bounds(season_number) if cp_type == "shop" else None
         for sex in CAT_SEXES:
-            base_buy = rnd.randint(2, 10)
+            if early_buyback_bounds:
+                base_buy = _pick_weighted_price(
+                    rnd,
+                    bounds=early_buyback_bounds,
+                    minimum_allowed=early_buyback_bounds["min"],
+                )
+            else:
+                base_buy = rnd.randint(2, 10)
             margin = rnd.randint(1, 5)
             # Небольшой смещающий коэффициент по полу, чтобы цены отличались.
             sex_shift = 1 if (sex == "F" and rnd.random() > 0.5) else 0
-            buy = max(1, base_buy + sex_shift)
-            sell = max(buy + 1, buy + margin)
+            base_buyback = max(1, base_buy + sex_shift)
+
+            if cp_type == "shop":
+                if early_buyback_bounds:
+                    shop_buyback = min(early_buyback_bounds["max"], max(early_buyback_bounds["min"], base_buyback))
+                else:
+                    shop_buyback = base_buyback
+                minimum_player_buy = max(
+                    shop_buyback + (0 if _safe_int(season_number, 0) == 1 else 1),
+                    early_sell_bounds["min"] if early_sell_bounds else 1,
+                )
+                if early_sell_bounds:
+                    if _safe_int(season_number, 0) == 1:
+                        player_buy = _pick_season_one_shop_sell_price(
+                            rnd,
+                            minimum_allowed=minimum_player_buy,
+                            upper_bound=early_sell_bounds["max"],
+                        )
+                    else:
+                        player_buy = _pick_weighted_price(
+                            rnd,
+                            bounds=early_sell_bounds,
+                            minimum_allowed=minimum_player_buy,
+                        )
+                else:
+                    player_buy = max(shop_buyback + 1, shop_buyback + margin)
+                buy = player_buy
+                sell = shop_buyback
+            else:
+                buy = base_buyback
+                sell = max(buy + 1, buy + margin)
             by_sex[sex] = {"buy": buy, "sell": sell}
             buy_values.append(buy)
             sell_values.append(sell)
 
+        aggregate_buy = round(sum(buy_values) / len(buy_values))
+        aggregate_sell = round(sum(sell_values) / len(sell_values))
+        if cp_type == "shop":
+            aggregate_buy = max(aggregate_buy, aggregate_sell + 1)
+
         market[color] = {
-            "buy": round(sum(buy_values) / len(buy_values)),
-            "sell": round(sum(sell_values) / len(sell_values)),
+            "buy": aggregate_buy,
+            "sell": aggregate_sell,
             **by_sex,
         }
     return market
@@ -1081,8 +1214,6 @@ def _remove_entity_by_id(entities: list[dict], entity_id: str | None, color: str
 def _entity_is_sellable_kitten(entity: dict | None) -> bool:
     if not isinstance(entity, dict):
         return False
-    if bool(entity.get("isSick")):
-        return False
     age_raw = entity.get("age", entity.get("ageSeasons"))
     age = _safe_int(age_raw, -1)
     if age >= 0:
@@ -1101,6 +1232,157 @@ def _recount_inventory_counts(entities: list[dict]) -> dict[str, dict[str, int]]
         if color in CAT_TYPES and sex in CAT_SEXES:
             counts[color][sex] += 1
     return counts
+
+
+def _sync_nursery_home_mirrors(nursery: dict | None) -> dict:
+    if not isinstance(nursery, dict):
+        return {}
+    homes = nursery.get("homes")
+    if not isinstance(homes, list):
+        homes = []
+    active_index = max(0, _safe_int(nursery.get("activeHomeIndex"), 0))
+    if homes:
+        active_index = min(active_index, len(homes) - 1)
+        active_home = homes[active_index]
+        nursery["homes"] = homes
+        nursery["activeHomeIndex"] = active_index
+        nursery["hasHome"] = True
+        nursery["home"] = json.loads(json.dumps(active_home, ensure_ascii=False))
+        nursery["insuranceActive"] = bool(active_home.get("insuranceActive"))
+        nursery["insuranceNext"] = bool(active_home.get("insuranceNext"))
+    else:
+        nursery["homes"] = []
+        nursery["activeHomeIndex"] = 0
+        nursery["hasHome"] = False
+        nursery["home"] = {}
+        nursery["insuranceActive"] = False
+        nursery["insuranceNext"] = False
+    return nursery
+
+
+def remove_player_cat_everywhere(
+    db: Session,
+    session_id: str,
+    season_number: int,
+    cat_id: str | None,
+    *,
+    color: str | None = None,
+    sex: str | None = None,
+) -> tuple[dict | None, str | None]:
+    normalized_cat_id = str(cat_id or "").strip()
+    if not normalized_cat_id:
+        return None, "CAT_NOT_AVAILABLE"
+    expected_color = _normalize_color(color) if color is not None else None
+    expected_sex = _normalize_sex(sex) if sex is not None else None
+
+    session = db.get(GameSession, session_id)
+    if not session:
+        return None, "invalid_session"
+
+    inventory = _parse_inventory(session.inventory_json or "{}")
+    entities = list(inventory.get("entities", []))
+    removed_entity: dict | None = None
+    next_entities: list[dict] = []
+    for entity in entities:
+        if removed_entity is None and str(entity.get("id") or "") == normalized_cat_id:
+            entity_color = _normalize_color(entity.get("color"))
+            entity_sex = _normalize_sex(entity.get("sex"))
+            if expected_color and entity_color != expected_color:
+                return None, "CAT_STATE_CHANGED"
+            if expected_sex and entity_sex != expected_sex:
+                return None, "CAT_STATE_CHANGED"
+            if not _entity_is_sellable_kitten(entity):
+                return None, "ONLY_KITTENS_CAN_BE_TRADED"
+            removed_entity = entity
+            continue
+        next_entities.append(entity)
+
+    progress = get_game_progress(db, session_id, season_number)
+    nursery = None
+    if progress:
+        try:
+            nursery = json.loads(progress.nursery_json or "{}")
+        except Exception:
+            nursery = {}
+    if not isinstance(nursery, dict):
+        nursery = {}
+
+    escaped_ids = {
+        str(value)
+        for value in (nursery.get("escapedCatIds") or [])
+        if value is not None
+    }
+    if normalized_cat_id in escaped_ids:
+        return None, "CAT_NOT_AVAILABLE"
+
+    def remove_from_list(values: list, *, fixed_slots: bool) -> tuple[list, dict | None]:
+        if not isinstance(values, list):
+            return values, None
+        next_values = list(values)
+        for index, value in enumerate(values):
+            if not isinstance(value, dict):
+                continue
+            if str(value.get("id") or "") != normalized_cat_id:
+                continue
+            entity_color = _normalize_color(value.get("color"))
+            entity_sex = _normalize_sex(value.get("sex"))
+            if expected_color and entity_color != expected_color:
+                return values, {"error": "CAT_STATE_CHANGED"}
+            if expected_sex and entity_sex != expected_sex:
+                return values, {"error": "CAT_STATE_CHANGED"}
+            if not _entity_is_sellable_kitten(value):
+                return values, {"error": "ONLY_KITTENS_CAN_BE_TRADED"}
+            if fixed_slots:
+                next_values[index] = None
+            else:
+                next_values.pop(index)
+            return next_values, value
+        return values, None
+
+    cats = list(nursery.get("cats") or [])
+    next_cats, nursery_removed = remove_from_list(cats, fixed_slots=False)
+    if isinstance(nursery_removed, dict) and nursery_removed.get("error"):
+        return None, nursery_removed["error"]
+    if nursery_removed:
+        nursery["cats"] = next_cats
+
+    homes = nursery.get("homes")
+    if not isinstance(homes, list):
+        homes = []
+    if not homes and isinstance(nursery.get("home"), dict):
+        homes = [json.loads(json.dumps(nursery["home"], ensure_ascii=False))]
+
+    if not nursery_removed:
+        for home_index, home in enumerate(homes):
+            if not isinstance(home, dict):
+                continue
+            next_kittens, removed_from_home = remove_from_list(list(home.get("kittens") or []), fixed_slots=True)
+            if isinstance(removed_from_home, dict) and removed_from_home.get("error"):
+                return None, removed_from_home["error"]
+            if removed_from_home:
+                next_home = {**home, "kittens": next_kittens}
+                homes = list(homes)
+                homes[home_index] = next_home
+                nursery["homes"] = homes
+                nursery_removed = removed_from_home
+                break
+
+    removed = removed_entity or nursery_removed
+    if not removed:
+        return None, "CAT_NOT_AVAILABLE"
+
+    session.inventory_json = _serialize_inventory(
+        {
+            "counts": _recount_inventory_counts(next_entities),
+            "entities": next_entities,
+        }
+    )
+
+    if progress is not None:
+        _sync_nursery_home_mirrors(nursery)
+        progress.nursery_json = json.dumps(nursery, ensure_ascii=False)
+
+    return removed, None
 
 
 def _remove_sellable_entities(
@@ -1128,8 +1410,6 @@ def _remove_sellable_entities(
             same_sex = _normalize_sex(entity.get("sex")) == normalized_sex if normalized_sex else True
             if same_id and same_color and same_sex:
                 matched = True
-                if bool(entity.get("isSick")):
-                    return entities, False, "SICK_KITTENS_CANNOT_BE_TRADED"
                 if not _entity_is_sellable_kitten(entity):
                     return entities, False, "ONLY_KITTENS_CAN_BE_TRADED"
                 removed = True
@@ -1150,8 +1430,6 @@ def _remove_sellable_entities(
 
     sellable_count = sum(1 for entity in matching_entities if _entity_is_sellable_kitten(entity))
     if sellable_count < qty:
-        if any(bool(entity.get("isSick")) for entity in matching_entities):
-            return entities, False, "SICK_KITTENS_CANNOT_BE_TRADED"
         return entities, False, "ONLY_KITTENS_CAN_BE_TRADED"
 
     remaining = qty
@@ -1233,7 +1511,25 @@ def trade_market(
     )
 
     if action == "sell":
-        if entities:
+        if entity_id:
+            removed_entity, reason = remove_player_cat_everywhere(
+                db,
+                session.id,
+                season_number,
+                entity_id,
+                color=color,
+                sex=sex,
+            )
+            if not removed_entity:
+                return False, reason or "CAT_NOT_AVAILABLE"
+            removed_color = _normalize_color(removed_entity.get("color"))
+            removed_sex = _normalize_sex(removed_entity.get("sex"))
+            if removed_color != color or removed_sex != sex:
+                return False, "CAT_NOT_AVAILABLE"
+            inventory_data = _parse_inventory(session.inventory_json or "{}")
+            counts = inventory_data["counts"]
+            entities = inventory_data["entities"]
+        elif entities:
             entities, removed, reason = _remove_sellable_entities(
                 entities,
                 color=color,
@@ -1329,7 +1625,7 @@ def save_game_progress(
     progress.nursery_json = nursery_json
     progress.nursery_coins_delta = _safe_int(nursery_coins_delta, 0)
     progress.time_left = max(0, _safe_int(time_left, 0))
-    progress.updated_at = datetime.utcnow()
+    progress.updated_at = _utc_now()
 
     db.commit()
     db.refresh(progress)

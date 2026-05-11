@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from sqlalchemy import String, DateTime, ForeignKey, Integer, Text, UniqueConstraint, Float, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -8,6 +8,10 @@ from .game_config import CONFIG_START_COINS
 
 def _uuid() -> str:
     return str(uuid.uuid4())
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class User(Base):
@@ -35,8 +39,8 @@ class User(Base):
     event_code: Mapped[str | None] = mapped_column(String(120), nullable=True)
     desired_specialties: Mapped[str | None] = mapped_column(Text, nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now, onupdate=_utc_now)
 
     profile: Mapped["CandidateProfile"] = relationship(
         "CandidateProfile", back_populates="user", uselist=False
@@ -56,7 +60,7 @@ class CandidateProfile(Base):
     study_year: Mapped[int] = mapped_column(Integer, default=0)
     skills_json: Mapped[str] = mapped_column(Text, default="[]")  # JSON строка
 
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
 
     user: Mapped["User"] = relationship("User", back_populates="profile")
 
@@ -82,7 +86,7 @@ class GameSession(Base):
     finish_reason: Mapped[str | None] = mapped_column(String(80), nullable=True)
     bankrupt_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     result_coins_player: Mapped[int] = mapped_column(Integer, default=CONFIG_START_COINS)
@@ -101,7 +105,7 @@ class Season(Base):
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey("game_sessions.id"), nullable=False)
 
     season_number: Mapped[int] = mapped_column(Integer, nullable=False)  # 1..13
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     coins_start: Mapped[int] = mapped_column(Integer, default=CONFIG_START_COINS)
@@ -123,7 +127,7 @@ class GameEvent(Base):
     season_number: Mapped[int] = mapped_column(Integer, nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
     payload_json: Mapped[str] = mapped_column(Text, default="{}")  # flexible gameplay payload, including nursery disease events
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
 
 
 class CompetencyResult(Base):
@@ -135,7 +139,7 @@ class CompetencyResult(Base):
     competency_code: Mapped[str] = mapped_column(String(50), nullable=False)
     score: Mapped[int] = mapped_column(Integer, nullable=False)  # 0..100
     explain_json: Mapped[str] = mapped_column(Text, default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
 
 
 class GameProgress(Base):
@@ -150,7 +154,7 @@ class GameProgress(Base):
     nursery_coins_delta: Mapped[int] = mapped_column(Integer, default=0)
     time_left: Mapped[int] = mapped_column(Integer, default=0)
 
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now, onupdate=_utc_now)
 
 
 class TradeRequest(Base):
@@ -189,8 +193,8 @@ class TradeRequest(Base):
     ttl_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now, onupdate=_utc_now)
 
 
 class TradeRelation(Base):
@@ -209,7 +213,7 @@ class TradeRelation(Base):
     sent_requests_in_season: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     cancel_count_in_season: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now, onupdate=_utc_now)
 
 
 class TradeBotState(Base):
@@ -225,7 +229,7 @@ class TradeBotState(Base):
     coins: Mapped[int] = mapped_column(Integer, nullable=False, default=200)
     inventory_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
 
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now, onupdate=_utc_now)
 
 
 class CatteryCompetitor(Base):
@@ -256,8 +260,8 @@ class CatteryCompetitor(Base):
     avg_sell_price_this_season: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     last_deal_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now, onupdate=_utc_now)
 
 
 class EmailVerificationToken(Base):
@@ -268,7 +272,7 @@ class EmailVerificationToken(Base):
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
 
 
 class PasswordResetToken(Base):
@@ -279,7 +283,7 @@ class PasswordResetToken(Base):
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
 
 
 class RefreshToken(Base):
@@ -291,7 +295,7 @@ class RefreshToken(Base):
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
     replaced_by_token_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("refresh_tokens.id"), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ip: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -307,7 +311,7 @@ class AuditLog(Base):
     email_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     ip: Mapped[str | None] = mapped_column(String(128), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
     result_code: Mapped[str] = mapped_column(String(80), nullable=False, default="OK")
 
 
@@ -321,8 +325,8 @@ class AuthRateLimit(Base):
     action: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     key: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    window_start: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    window_start: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now, onupdate=_utc_now)
 
 
 class CompetencyProgress(Base):
@@ -342,7 +346,7 @@ class CompetencyProgress(Base):
     last_analytics_delta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     last_negotiation_delta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     last_strategy_delta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now, onupdate=_utc_now)
 
 
 class SessionCompetencyDelta(Base):
@@ -358,7 +362,7 @@ class SessionCompetencyDelta(Base):
     negotiation_delta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     strategy_delta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     place_awarded: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
 
 
 class GameSessionResult(Base):
@@ -377,7 +381,7 @@ class GameSessionResult(Base):
     analytics_delta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     negotiation_delta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     strategy_delta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    ended_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    ended_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)
     reason: Mapped[str] = mapped_column(String(80), nullable=False, default="SEASONS_COMPLETED")
     stats_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utc_now)

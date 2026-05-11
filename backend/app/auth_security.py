@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import jwt
@@ -18,7 +18,7 @@ class TokenError(Exception):
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def normalize_email(email: str) -> str:

@@ -1,6 +1,6 @@
 import os
 import unittest
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
 os.environ.setdefault('DATABASE_URL', 'sqlite:///./test_auth.db')
@@ -11,10 +11,15 @@ os.environ.setdefault('APP_BASE_URL', 'http://localhost:5173')
 os.environ.setdefault('COOKIE_SECURE', 'false')
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import close_all_sessions
 
 from app.db import Base, SessionLocal, engine, ensure_auth_columns
 from app.main import app
 from app.models import EmailVerificationToken, PasswordResetToken, RefreshToken, User
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class AuthFlowTests(unittest.TestCase):
@@ -25,7 +30,8 @@ class AuthFlowTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.client.close()
-        engine.dispose()
+        close_all_sessions()
+        engine.dispose(close=True)
 
     def setUp(self):
         Base.metadata.drop_all(bind=engine)
@@ -103,7 +109,7 @@ class AuthFlowTests(unittest.TestCase):
         db = SessionLocal()
         try:
             row = db.query(EmailVerificationToken).order_by(EmailVerificationToken.created_at.desc()).first()
-            row.expires_at = datetime.utcnow() - timedelta(minutes=1)
+            row.expires_at = utc_now() - timedelta(minutes=1)
             db.commit()
         finally:
             db.close()

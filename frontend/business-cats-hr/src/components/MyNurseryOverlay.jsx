@@ -4,8 +4,8 @@ import './MyNurseryOverlay.css'
 
 const HOME_COST = 3
 const FEED_COST = 1
-const INSURANCE_COST = 1
-const TREAT_COST = 2
+export const INSURANCE_COST = 3
+export const TREAT_COST = 2
 const VALID_SEX = new Set(['M', 'F'])
 const COLOR_ALIAS = {
   orange: 'ginger',
@@ -107,6 +107,12 @@ const DISEASE_LABEL = {
   POISONING: 'Отравление',
   BROKEN_PAW: 'Поврежденная лапа',
 }
+const DISEASE_EMOJI = {
+  RINGWORM: '🦠',
+  FLEAS: '🪳',
+  POISONING: '🤢',
+  BROKEN_PAW: '🩹',
+}
 const SEX_LABEL = {
   M: 'мальчик',
   F: 'девочка',
@@ -201,8 +207,25 @@ export const getDiseaseState = (cat) => {
 }
 
 const isCatSick = (cat) => getDiseaseState(cat).isSick
+const getDiseaseLabel = (cat) => {
+  const disease = getDiseaseState(cat)
+  if (!disease.isSick || !disease.diseaseType) return null
+  return DISEASE_LABEL[disease.diseaseType] || 'Неизвестная болезнь'
+}
 
 export const getTreatmentCost = (insuranceActive) => (insuranceActive ? 0 : TREAT_COST)
+
+export const findHomeContainingCat = (nursery, catId) => {
+  const normalizedNursery = syncNurseryWithHomes(nursery)
+  const normalizedId = String(catId ?? '')
+  if (!normalizedId) return null
+  return (normalizedNursery?.homes || []).find((home) =>
+    (home?.kittens || []).some((cat) => String(cat?.id ?? '') === normalizedId)
+  ) || null
+}
+
+export const isCatCoveredByInsurance = (nursery, catId) =>
+  Boolean(findHomeContainingCat(nursery, catId)?.insuranceActive)
 
 const createEmptyHome = (number = 1) => ({
   id: `home-${Math.max(1, Number(number) || 1)}`,
@@ -223,12 +246,29 @@ const clampHomeIndex = (value, totalHomes) => {
   return Math.min(count - 1, Math.max(0, Math.floor(normalized)))
 }
 
+const hasLegacyHomeState = (home) => {
+  if (!home || typeof home !== 'object') return false
+  const leftParents = Array.isArray(home?.parents?.left) ? home.parents.left : []
+  const rightParents = Array.isArray(home?.parents?.right) ? home.parents.right : []
+  const kittens = Array.isArray(home?.kittens) ? home.kittens : []
+  if (leftParents.some((id) => id != null) || rightParents.some((id) => id != null)) return true
+  if (kittens.some(Boolean)) return true
+  if (Boolean(home?.breedPending?.left) || Boolean(home?.breedPending?.right)) return true
+  if (Number(home?.lastBreedSeason?.left) > 0 || Number(home?.lastBreedSeason?.right) > 0) return true
+  return false
+}
+
 const syncNurseryWithHomes = (nursery) => {
   const source = nursery && typeof nursery === 'object' ? nursery : {}
   const sourceHomes =
     Array.isArray(source.homes) && source.homes.length
       ? source.homes
-      : Boolean(source.hasHome || source.home || source.insuranceActive || source.insuranceNext)
+      : Boolean(
+          source.hasHome ||
+          source.insuranceActive ||
+          source.insuranceNext ||
+          hasLegacyHomeState(source.home)
+        )
         ? [
             {
               ...(source.home && typeof source.home === 'object' ? source.home : {}),
@@ -299,6 +339,80 @@ export const applyKittenTreatment = (nursery, catId, currentSeason) => {
   })
 }
 
+export const getFamilySideForCat = (catId, activeHome) => {
+  const normalizedId = String(catId ?? '')
+  if (!normalizedId || !activeHome || typeof activeHome !== 'object') return null
+  const leftParents = Array.isArray(activeHome?.parents?.left) ? activeHome.parents.left : []
+  const rightParents = Array.isArray(activeHome?.parents?.right) ? activeHome.parents.right : []
+  if (leftParents.some((id) => String(id ?? '') === normalizedId)) return 'left'
+  if (rightParents.some((id) => String(id ?? '') === normalizedId)) return 'right'
+  const kittens = Array.isArray(activeHome?.kittens) ? activeHome.kittens : []
+  const kittenIndex = kittens.findIndex((cat) => String(cat?.id ?? '') === normalizedId)
+  if (kittenIndex >= 0 && kittenIndex < 6) return 'left'
+  if (kittenIndex >= 6) return 'right'
+  return null
+}
+
+const feedCatState = (cat) => (
+  cat
+    ? {
+        ...cat,
+        hungry: false,
+        fedThisSeason: true,
+      }
+    : cat
+)
+
+const findCatInNursery = (nursery, catId) => {
+  const normalizedId = String(catId ?? '')
+  if (!normalizedId || !nursery || typeof nursery !== 'object') return null
+  const yardMatch = (nursery.cats || []).find((cat) => String(cat?.id ?? '') === normalizedId)
+  if (yardMatch) return yardMatch
+  for (const home of nursery.homes || []) {
+    const homeMatch = (home?.kittens || []).find((cat) => String(cat?.id ?? '') === normalizedId)
+    if (homeMatch) return homeMatch
+  }
+  return null
+}
+
+export const feedCatAndFamily = (nursery, activeHomeIndex, catId) => {
+  const normalizedNursery = syncNurseryWithHomes(nursery)
+  const homeIndex = clampHomeIndex(activeHomeIndex, normalizedNursery?.homes?.length || 0)
+  const activeHome = normalizedNursery?.homes?.[homeIndex]
+  if (!activeHome) return normalizedNursery
+
+  const normalizedId = String(catId ?? '')
+  const familySide = getFamilySideForCat(normalizedId, activeHome)
+  const isParent =
+    (activeHome?.parents?.left || []).some((id) => String(id ?? '') === normalizedId) ||
+    (activeHome?.parents?.right || []).some((id) => String(id ?? '') === normalizedId)
+
+  const nextCats = (normalizedNursery?.cats || []).map((cat) =>
+    String(cat?.id ?? '') === normalizedId ? feedCatState(cat) : cat
+  )
+  const nextHomes = (normalizedNursery?.homes || []).map((home, index) => {
+    if (index !== homeIndex) return home
+    const nextKittens = (home?.kittens || []).map((cat, kittenIndex) => {
+      if (!cat) return cat
+      const kittenId = String(cat?.id ?? '')
+      if (kittenId === normalizedId) return feedCatState(cat)
+      if (!isParent || !familySide) return cat
+      const kittenSide = kittenIndex < 6 ? 'left' : 'right'
+      return kittenSide === familySide ? feedCatState(cat) : cat
+    })
+    return {
+      ...home,
+      kittens: nextKittens,
+    }
+  })
+
+  return syncNurseryWithHomes({
+    ...normalizedNursery,
+    cats: nextCats,
+    homes: nextHomes,
+  })
+}
+
 export default function MyNurseryOverlay({
   open,
   onClose,
@@ -318,7 +432,6 @@ export default function MyNurseryOverlay({
   const [activeTool, setActiveTool] = useState(null)
   const [modal, setModal] = useState(null)
   const [feedQueue, setFeedQueue] = useState([])
-  const [inspectTarget, setInspectTarget] = useState(null)
   const nurseryState = useMemo(() => syncNurseryWithHomes(nursery), [nursery])
   const updateNursery = useCallback(
     (updater) => {
@@ -429,21 +542,6 @@ export default function MyNurseryOverlay({
   )
 
   const yardCats = cats.filter((cat) => !assignedIds.has(cat.id))
-  const hasMotherOnSide = useCallback(
-    (side) =>
-      (activeHome?.parents?.[side] || []).some((catId) => {
-        const cat = catId ? catsById[catId] : null
-        return cat?.sex === 'F'
-      }),
-    [activeHome?.parents, catsById]
-  )
-  const isProtectedKittenSlot = useCallback(
-    (slotIndex) => {
-      const side = slotIndex < 6 ? 'left' : 'right'
-      return hasMotherOnSide(side)
-    },
-    [hasMotherOnSide]
-  )
   const parentFeedTargets = useMemo(
     () =>
       ['left', 'right'].flatMap((side) =>
@@ -462,11 +560,10 @@ export default function MyNurseryOverlay({
         (cat, idx) =>
           cat &&
           !assignedIds.has(cat.id) &&
-          !isProtectedKittenSlot(idx) &&
           cat.hungry &&
           !cat.fedThisSeason
       ),
-    [homeWindowKittens, assignedIds, isProtectedKittenSlot]
+    [homeWindowKittens, assignedIds]
   )
   const kittensByFamilySide = useMemo(() => {
     const buckets = { left: Array(6).fill(null), right: Array(6).fill(null) }
@@ -549,8 +646,8 @@ export default function MyNurseryOverlay({
     setModal({ type: 'insurance' })
   }
 
-  const handleInspect = () => {
-    setActiveTool(activeTool === 'inspect' ? null : 'inspect')
+  const handleTreatMode = () => {
+    setActiveTool(activeTool === 'treat' ? null : 'treat')
   }
 
   const handleFeed = (cat) => {
@@ -576,30 +673,19 @@ export default function MyNurseryOverlay({
     }
     recordSeasonSpend('feed', FEED_COST)
     const afterFeedCoins = coins - FEED_COST
-    updateNursery((prev) => ({
-      ...prev,
-      cats: prev.cats.map((c) =>
-        c.id === cat.id
-          ? { ...c, hungry: false, fedThisSeason: true }
-          : c
-      ),
-      homes: (prev?.homes || []).map((home) => ({
-        ...home,
-        kittens: (home?.kittens || []).map((k) =>
-          k?.id === cat.id ? { ...k, hungry: false, fedThisSeason: true } : k
-        ),
-      })),
-    }))
+    const nextNursery = feedCatAndFamily(nurseryState, activeHomeIndex, cat.id)
+    updateNursery(nextNursery)
     setModal(null)
     if (feedQueue.length) {
-      const [next, ...rest] = feedQueue
+      const [nextId, ...rest] = feedQueue
       setFeedQueue(rest)
       if (afterFeedCoins < FEED_COST) {
         openNotEnoughCoinsModal(FEED_COST)
         return
       }
-      if (next?.hungry && !next?.fedThisSeason) {
-        setModal({ type: 'confirmFeed', cat: next })
+      const nextCat = findCatInNursery(nextNursery, nextId)
+      if (nextCat?.hungry && !nextCat?.fedThisSeason) {
+        setModal({ type: 'confirmFeed', cat: nextCat })
       }
     }
   }
@@ -618,31 +704,37 @@ export default function MyNurseryOverlay({
       openNotEnoughCoinsModal(FEED_COST)
       return
     }
-    setFeedQueue(queue.slice(1))
+    setFeedQueue(queue.slice(1).map((cat) => cat.id))
     setModal({ type: 'confirmFeed', cat: queue[0] })
   }
 
-  const handleInspectCat = async (cat) => {
-    if (!cat) return
-    setInspectTarget(cat)
-    const age = Number(cat?.age ?? cat?.ageSeasons ?? 0)
-    const isKitten = Number.isFinite(age) ? age < adultAge : Boolean(cat?.isKitten)
-    if (!isKitten) return
-    const disease = getDiseaseState(cat)
-    await logNurseryEvent('kitten_examined', {
-      catId: cat.id,
-      diseaseType: disease.diseaseType,
-      healthStatus: disease.healthStatus,
-    })
-  }
+  const logKittenExamined = useCallback(
+    async (cat) => {
+      if (!cat) return
+      const disease = getDiseaseState(cat)
+      const age = Number(cat?.age ?? cat?.ageSeasons ?? 0)
+      const isKitten = Number.isFinite(age) ? age < adultAge : Boolean(cat?.isKitten)
+      if (!isKitten) return
+      await logNurseryEvent('kitten_examined', {
+        catId: cat.id,
+        diseaseType: disease.diseaseType,
+        healthStatus: disease.healthStatus,
+      })
+    },
+    [adultAge, logNurseryEvent]
+  )
 
   const handleTreat = async (cat) => {
+    if (!cat) return
+    await logKittenExamined(cat)
+    const age = Number(cat?.age ?? cat?.ageSeasons ?? 0)
+    const isKitten = Number.isFinite(age) ? age < adultAge : Boolean(cat?.isKitten)
     const disease = getDiseaseState(cat)
-    if (!disease.isSick) {
+    if (!isKitten || !disease.isSick) {
       setModal({ type: 'info', title: 'Лечение не требуется' })
       return
     }
-    const treatmentCost = getTreatmentCost(Boolean(activeHome?.insuranceActive))
+    const treatmentCost = getTreatmentCost(isCatCoveredByInsurance(nurseryState, cat.id))
     if (treatmentCost > 0 && coins < treatmentCost) {
       openNotEnoughCoinsModal(treatmentCost)
       return
@@ -655,7 +747,6 @@ export default function MyNurseryOverlay({
       recordSeasonSpend('treatment', treatmentCost)
     }
     updateNursery((prev) => applyKittenTreatment(prev, cat.id, seasonNumber))
-    setInspectTarget(null)
     setModal({
       type: 'info',
       title: treatmentCost > 0 ? 'Котёнок вылечен. Списано 2 монеты.' : 'Котёнок вылечен. Лечение покрыто страховкой.',
@@ -669,6 +760,10 @@ export default function MyNurseryOverlay({
   }
 
   const handleInsuranceConfirm = () => {
+    if (activeHome?.insuranceNext) {
+      setModal({ type: 'info', title: 'Страховка на следующий сезон уже куплена' })
+      return
+    }
     if (coins < INSURANCE_COST) {
       openNotEnoughCoinsModal(INSURANCE_COST)
       return
@@ -843,6 +938,23 @@ export default function MyNurseryOverlay({
     return `cat--${sexClass}-${color}`
   }
 
+  const renderDiseaseBadge = (cat) => {
+    const disease = getDiseaseState(cat)
+    const diseaseLabel = getDiseaseLabel(cat)
+    if (!disease.isSick || !diseaseLabel) return null
+    return (
+      <span
+        className="cat-disease-badge"
+        aria-label={diseaseLabel}
+        title={diseaseLabel}
+      >
+        <span className="cat-disease-badge__emoji" aria-hidden="true">
+          {DISEASE_EMOJI[disease.diseaseType] || '⚕'}
+        </span>
+      </span>
+    )
+  }
+
   const renderCat = (cat, options = {}) => {
     if (!cat) return null
     const { sex, color } = getCatMeta(cat)
@@ -980,13 +1092,13 @@ export default function MyNurseryOverlay({
               <span className="nursery__btn-label">Страховка</span>
             </button>
             <button
-              className={`nursery__btn own-nurseries__actions-item own-nurseries__actions-item--magnifier ${activeTool === 'inspect' ? 'is-active' : ''}`}
-              onClick={handleInspect}
+              className={`nursery__btn own-nurseries__actions-item own-nurseries__actions-item--magnifier ${activeTool === 'treat' ? 'is-active' : ''}`}
+              onClick={handleTreatMode}
               type="button"
-              title="Осмотр"
+              title="Лечить"
             >
-              <span className="nursery__btn-icon" aria-hidden="true">🔎</span>
-              <span className="nursery__btn-label">Осмотр</span>
+              <span className="nursery__btn-icon" aria-hidden="true">💊</span>
+              <span className="nursery__btn-label">Лечить</span>
             </button>
           </div>
 
@@ -1020,7 +1132,7 @@ export default function MyNurseryOverlay({
               </div>
               <div className="nursery__house">
                 <img src="/assets/nurseruhome.png" alt="home" />
-                {activeHome?.insuranceActive || activeHome?.insuranceNext ? (
+                {activeHome?.insuranceActive ? (
                   <span className="insurance-badge">
                     <img src="/assets/cats/zastrachovano-domik.png" alt="insured house" />
                   </span>
@@ -1066,8 +1178,8 @@ export default function MyNurseryOverlay({
                                       handleFeed(cat)
                                       return
                                     }
-                                    if (activeTool === 'inspect') {
-                                      handleInspectCat(cat)
+                                    if (activeTool === 'treat') {
+                                      handleTreat(cat)
                                       return
                                     }
                                     handleRemoveParent(side, i)
@@ -1092,8 +1204,6 @@ export default function MyNurseryOverlay({
                         <div className="nursery-box__kittens">
                           {Array.from({ length: 6 }).map((_, idx) => {
                             const kitten = kittensByFamilySide[side][idx] || null
-                            const slotIndex = side === 'left' ? idx : idx + 6
-                            const isProtected = isProtectedKittenSlot(slotIndex)
                             return (
                               <div
                                 key={`${side}-kitten-window-${idx}`}
@@ -1102,15 +1212,11 @@ export default function MyNurseryOverlay({
                                 onClick={() => {
                                   if (!kitten) return
                                   if (activeTool === 'feed') {
-                                    if (isProtected) {
-                                      setModal({ type: 'info', title: 'Котят с мамой кормить не нужно' })
-                                      return
-                                    }
                                     handleFeed(kitten)
                                     return
                                   }
-                                  if (activeTool === 'inspect') {
-                                    handleInspectCat(kitten)
+                                  if (activeTool === 'treat') {
+                                    handleTreat(kitten)
                                     return
                                   }
                                   moveKittenToYard(side, idx)
@@ -1120,10 +1226,6 @@ export default function MyNurseryOverlay({
                                   e.preventDefault()
                                   const type = e.dataTransfer.getData('text/plain')
                                   if (type !== 'feed') return
-                                  if (isProtected) {
-                                    setModal({ type: 'info', title: 'Котят с мамой кормить не нужно' })
-                                    return
-                                  }
                                   if (kitten) handleFeed(kitten)
                                 }}
                                 onDragOver={(e) => activeTool === 'feed' && e.preventDefault()}
@@ -1131,7 +1233,7 @@ export default function MyNurseryOverlay({
                                 {kitten ? (
                                   <>
                                     {renderCat(kitten, { alt: 'kitten' })}
-                                    {kitten.hungry && !isProtected ? (
+                                    {kitten.hungry ? (
                                       <img
                                         className="hungry"
                                         src="/assets/hungrywhite.png"
@@ -1142,14 +1244,7 @@ export default function MyNurseryOverlay({
                                       />
                                     ) : null}
                                     {isCatSick(kitten) ? (
-                                      <img
-                                        className="sick"
-                                        src={SICK_ICON[getDiseaseState(kitten).diseaseType]}
-                                        alt=""
-                                        onError={(e) => {
-                                          e.currentTarget.style.display = 'none'
-                                        }}
-                                      />
+                                      renderDiseaseBadge(kitten)
                                     ) : null}
                                   </>
                                 ) : null}
@@ -1184,7 +1279,7 @@ export default function MyNurseryOverlay({
                 }}
                 onClick={() => {
                   if (activeTool === 'feed') handleFeed(cat)
-                  if (activeTool === 'inspect') handleInspectCat(cat)
+                  if (activeTool === 'treat') handleTreat(cat)
                 }}
                 onDrop={(e) => {
                   if (activeTool !== 'feed') return
@@ -1206,14 +1301,7 @@ export default function MyNurseryOverlay({
                   />
                 ) : null}
                 {isCatSick(cat) ? (
-                  <img
-                    className="sick"
-                    src={SICK_ICON[getDiseaseState(cat).diseaseType]}
-                    alt=""
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none'
-                    }}
-                  />
+                  renderDiseaseBadge(cat)
                 ) : null}
               </div>
             ))}
@@ -1343,63 +1431,6 @@ export default function MyNurseryOverlay({
         </div>
       ) : null}
 
-      {inspectTarget ? (
-        <div className="modal-overlay" onClick={() => setInspectTarget(null)}>
-          <div className="modal modal--size-cats" onClick={(e) => e.stopPropagation()}>
-            <div className="modal__header">
-              <div className="modal__title">Обследование и лечение</div>
-              <div className="modal__desc"><span>Диагностика состояния выбранного животного</span></div>
-            </div>
-            <div className="modal__body">
-              <div className="modal__body-wrapper">
-                <div className="modal__body-cats">
-                  {renderCat(inspectTarget, { single: true, readonly: true, count: 1, description: true })}
-                </div>
-                <div className="modal__body-price">
-                  {getDiseaseState(inspectTarget).isSick ? (
-                    <img
-                      className="inspect-icon"
-                      src={SICK_ICON[getDiseaseState(inspectTarget).diseaseType]}
-                      alt="sick"
-                    />
-                  ) : null}
-                  <p className="modal__body-price-text">
-                    статус: {
-                      getDiseaseState(inspectTarget).isSick
-                        ? 'болен'
-                        : getDiseaseState(inspectTarget).healthStatus === 'HEALED'
-                          ? 'вылечен'
-                          : 'здоров'
-                    }
-                  </p>
-                  <div className="modal__desc" style={{ marginTop: 8, textAlign: 'left' }}>
-                    <div>Пол: {SEX_LABEL[normalizeSex(inspectTarget?.sex) || 'M'] || 'котик'}</div>
-                    <div>Окрас: {resolveColorLabel(inspectTarget?.color)}</div>
-                    <div>Возраст: {Number(inspectTarget?.age ?? 0)} сез.</div>
-                    {getDiseaseState(inspectTarget).isSick ? (
-                      <>
-                        <div>Диагноз: {DISEASE_LABEL[getDiseaseState(inspectTarget).diseaseType] || 'неизвестно'}</div>
-                        <div>Стоимость лечения: {getTreatmentCost(Boolean(activeHome?.insuranceActive))}</div>
-                        <div>
-                          {activeHome?.insuranceActive ? 'Покрывается страховкой' : 'Страховка не покрывает лечение'}
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-              <div className="modal__body-actions">
-                {getDiseaseState(inspectTarget).isSick ? (
-                  <button className="text_button text_button--color-blue" onClick={() => handleTreat(inspectTarget)}>Лечить</button>
-                ) : (
-                  <button className="text_button text_button--color-blue" onClick={() => setInspectTarget(null)}>Понятно</button>
-                )}
-                <button className="text_button text_button--color-transparent" onClick={() => setInspectTarget(null)}>Закрыть</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }

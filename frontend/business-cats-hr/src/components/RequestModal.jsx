@@ -17,9 +17,9 @@ const TITLE_BY_STATUS = {
 }
 
 const CLARIFICATION_REASON_LABEL = {
-  CAT_ALREADY_SOLD: 'Котик уже продан',
-  CAT_NOT_AVAILABLE: 'Котик недоступен',
-  CAT_STATE_CHANGED: 'Состояние котика изменилось',
+  CAT_ALREADY_SOLD: 'Котёнок уже продан',
+  CAT_NOT_AVAILABLE: 'Котёнок уже недоступен для сделки',
+  CAT_STATE_CHANGED: 'Состояние котёнка изменилось',
   PRICE_OUTDATED: 'Цена устарела',
   UNKNOWN: 'Нужно обновить заявку',
 }
@@ -49,8 +49,9 @@ const DECISION_REASON_LABEL = {
   LOW_CASH: 'У магазина не хватает монет',
   LOW_DEMAND: 'Низкий спрос',
   OVERSTOCKED: 'Склад переполнен',
-  BAD_RELATION: 'Слабые отношения',
-  NO_RELATION: 'Нет доверия к игроку',
+  BAD_RELATION: 'Магазин не доверяет вам',
+  LOW_TRUST: 'Магазин не доверяет вам',
+  NO_RELATION: 'Магазин полностью потерял доверие',
   FAIR_COUNTER: 'Магазин предлагает справедливую встречную цену',
 }
 

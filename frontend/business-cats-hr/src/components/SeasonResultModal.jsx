@@ -32,7 +32,6 @@ export default function SeasonResultModal({ open, result, nextSeason, onConfirm 
   const escapedCats = Number(result?.escapedCats ?? result?.escaped ?? 0)
   const expenses = Number(result?.expenses ?? 0)
   const profit = Number(result?.profit ?? 0)
-  const credit = Number(result?.creditDelta ?? result?.creditChange ?? 0)
   const finalPlace = Number(result?.finalPlace ?? 0)
   const finalBalance = Number(result?.finalBalance ?? coinsEnd)
   const seasonCountCompleted = Number(result?.seasonCountCompleted ?? 0)
@@ -168,13 +167,6 @@ export default function SeasonResultModal({ open, result, nextSeason, onConfirm 
             <span className={`body-balance-coin ${profit < 0 ? 'body-balance-coin--negative' : 'body-balance-coin--positive'} notranslate`}>
               {profit}
             </span>
-            <span className="body-balance-coin-icon coin" />
-          </p>
-        </div>
-        <div className="body-balance-row-header">
-          <p className="body-balance-row-title">кредит</p>
-          <p className="body-balance-row-coin">
-            <span className={`body-balance-coin ${credit < 0 ? 'body-balance-coin--negative' : ''} notranslate`}>{credit}</span>
             <span className="body-balance-coin-icon coin" />
           </p>
         </div>
