@@ -139,18 +139,24 @@
 }
 
 .mapBuilding img {
-  width: 150px;
-  height: auto;
+  display: block;
+  object-fit: contain;
+}
+
+.shopBuilding img {
+  width: 188px;
+  height: 188px;
+}
+
+.catteryBuilding img {
+  width: 202px;
+  height: 152px;
   display: block;
 }
 
 .mapBuilding:hover {
   transform: translate(-50%, -52%) scale(1.03);
   filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.35));
-}
-
-.yourCattery img {
-  width: 170px;
 }
 
 .yourMarker {
@@ -246,10 +252,17 @@
 
   .mapBuilding img {
     width: 130px;
+    height: auto;
   }
 
-  .yourCattery img {
-    width: 150px;
+  .shopBuilding img {
+    width: 156px;
+    height: 156px;
+  }
+
+  .catteryBuilding img {
+    width: 168px;
+    height: 126px;
   }
 
   .mapTree {

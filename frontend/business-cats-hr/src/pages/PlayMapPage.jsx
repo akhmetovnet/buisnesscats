@@ -14,34 +14,34 @@ import TradeSendModal from '../components/TradeSendModal.jsx'
 import './PlayMapPage.css'
 
 const PETSHOPS = [
-  { id: 1, left: 18, top: 30, name: 'Бонифаций' },
-  { id: 2, left: 35, top: 30, name: 'Полосатый' },
-  { id: 3, left: 50, top: 30, name: 'Любимец' },
-  { id: 4, left: 69, top: 30, name: 'Мурзик' },
-  { id: 5, left: 84, top: 30, name: 'Зооцентр' },
+  { id: 1, left: 38.5, top: 25, name: 'Бонифаций' },
+  { id: 2, left: 50.5, top: 25, name: 'Полосатый' },
+  { id: 3, left: 62.5, top: 25, name: 'Любимец' },
+  { id: 4, left: 74.5, top: 25, name: 'Мурзик' },
+  { id: 5, left: 86.5, top: 25, name: 'Зооцентр' },
 ]
 
 const CATTERIES = [
-  { id: 1, left: 10, top: 50 },
-  { id: 2, left: 23, top: 50 },
-  { id: 3, left: 36, top: 49 },
-  { id: 4, left: 50, top: 50.5 },
-  { id: 5, left: 64, top: 49 },
-  { id: 6, left: 78, top: 50.2 },
-  { id: 7, left: 14, top: 62 },
-  { id: 8, left: 28, top: 64 },
-  { id: 9, left: 42, top: 63 },
-  { id: 10, left: 56, top: 64 },
-  { id: 11, left: 70, top: 63.5 },
-  { id: 12, left: 84, top: 64.5 },
-  { id: 13, left: 9, top: 76 },
-  { id: 14, left: 24, top: 77.5 },
-  { id: 15, left: 39, top: 76.5 },
-  { id: 16, left: 54, top: 78 },
-  { id: 17, left: 69, top: 76.8 },
-  { id: 18, left: 82, top: 78.5 },
-  { id: 19, left: 18, top: 89.5 },
-  { id: 20, left: 60, top: 90 },
+  { id: 1, left: 25, top: 42.5 },
+  { id: 2, left: 37.5, top: 42.5 },
+  { id: 3, left: 50, top: 42.5 },
+  { id: 4, left: 62.5, top: 42.5 },
+  { id: 5, left: 75, top: 42.5 },
+  { id: 6, left: 25, top: 57.5 },
+  { id: 7, left: 37.5, top: 57.5 },
+  { id: 8, left: 50, top: 57.5 },
+  { id: 9, left: 62.5, top: 57.5 },
+  { id: 10, left: 75, top: 57.5 },
+  { id: 11, left: 25, top: 72.5 },
+  { id: 12, left: 37.5, top: 72.5 },
+  { id: 13, left: 50, top: 72.5 },
+  { id: 14, left: 62.5, top: 72.5 },
+  { id: 15, left: 75, top: 72.5 },
+  { id: 16, left: 25, top: 87.5 },
+  { id: 17, left: 37.5, top: 87.5 },
+  { id: 18, left: 50, top: 87.5 },
+  { id: 19, left: 62.5, top: 87.5 },
+  { id: 20, left: 75, top: 87.5 },
 ]
 
 const YOUR_CATTTERY_ID = 1
@@ -2283,18 +2283,6 @@ export default function PlayMapPage({ me }) {
           )
         })}
 
-        <img
-          className="mapTree mapTreeLeft"
-          src="/assets/treelefts.png"
-          alt="tree left"
-          onError={imgFallback}
-        />
-        <img
-          className="mapTree mapTreeRight"
-          src="/assets/treerights.png"
-          alt="tree right"
-          onError={imgFallback}
-        />
       </div>
 
       <ShopOverlay
