@@ -433,17 +433,16 @@
 
 .own-nurseries__houses-item.own-nurseries__houses-item--single-house {
   position: absolute;
-  left: 50%;
-  top: 52%;
-  transform: translateX(-50%);
-  width: min(56vw, 1020px);
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .own-nurseries__houses-tablet {
   position: absolute;
-  left: -46px;
-  top: 50%;
-  transform: translateY(-50%);
+  left: 2.6%;
+  bottom: 3.2%;
+  transform: none;
 }
 
 .own-nurseries__houses-number_box {
@@ -468,47 +467,55 @@
 }
 
 .own-nurseries__nursery-box.nursery-box {
-  position: relative;
+  position: absolute;
+  inset: 0;
   width: 100%;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 70px;
+  height: 100%;
 }
 
 .nursery-box__family {
-  --breed-x: 100px;
-  --breed-y: 100px;
-  --kittens-x: 200px;
-  --kittens-y: 500px;
-  display: flex;
-  flex-direction: column;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 .nursery-box__family--left {
-  --breed-x: -10px;
-  --breed-y: -20px;
-  --kittens-x: 240px;
-  --kittens-y: -280px;
+  --parents-left: 7.0%;
+  --parents-top: 41.2%;
+  --parents-width: 18.2%;
+  --parents-height: 22.5%;
+  --breed-left: 4.2%;
+  --breed-top: 70.2%;
+  --kittens-left: 29.6%;
+  --kittens-top: 28.2%;
 }
 
 .nursery-box__family--right {
-  --breed-x: -10px;
-  --breed-y: -20px;
-   --kittens-x: 250px;
-  --kittens-y: -280px;
+  --parents-left: 46.8%;
+  --parents-top: 41.2%;
+  --parents-width: 18.2%;
+  --parents-height: 21.8%;
+  --breed-left: 45.4%;
+  --breed-top: 70.2%;
+  --kittens-left: 72.8%;
+  --kittens-top: 28%;
 }
 
 .nursery-box__old-cats-window {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  position: relative;
-  min-height: 10px;
+  gap: 2.2%;
+  position: absolute;
+  left: var(--parents-left);
+  top: var(--parents-top);
+  width: var(--parents-width);
+  height: var(--parents-height);
+  pointer-events: auto;
 }
 
 .nursery-box__old-cat-card {
-  min-height: 100px;
-  width: 100px;
+  width: 100%;
+  min-height: 0;
   justify-self: center;
   border-radius: 14px;
   display: flex;
@@ -516,7 +523,7 @@
   justify-content: center;
   cursor: pointer;
   position: relative;
-  transform: translate(var(--slot-x), var(--slot-y));
+  transform: none;
 }
 
 .nursery-box__old-cat-card.is-empty {
@@ -524,31 +531,12 @@
   background: rgba(245, 227, 205, 0.08);
 }
 
-/* Настрой смещения здесь: -X влево, +X вправо, -Y вверх, +Y вниз */
-.parent-slot--left-0 {
-   --slot-x: -60px;
-  --slot-y: -60px;
-}
-
-.parent-slot--left-1 {
-   --slot-x: -150px;
-  --slot-y: -60px;
-}
-
-.parent-slot--right-0 {
- --slot-x: -45px;
-  --slot-y: -60px;
-}
-
-.parent-slot--right-1 {
-  --slot-x: -135px;
-  --slot-y: -60px;
-}
-
 .breed-btn.nursery-box__cats-action {
-  margin-top: 10px;
-  width: 60%;
-  height: 40px;
+  position: absolute;
+  left: var(--breed-left);
+  top: var(--breed-top);
+  width: 24.8%;
+  height: 8.4%;
   border: 0;
   border-radius: 10px;
   background: #b25f34;
@@ -562,7 +550,7 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  transform: translate(var(--breed-x), var(--breed-y));
+  pointer-events: auto;
 }
 
 .breed-btn.nursery-box__cats-action.is-enabled {
@@ -576,19 +564,21 @@
 }
 
 .nursery-box__kittens {
-  margin-top: 10px;
+  position: absolute;
+  left: var(--kittens-left);
+  top: var(--kittens-top);
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  width: 40%;
-  min-height: 40%;
-  transform: translate(var(--kittens-x), var(--kittens-y));
+  gap: 2.4%;
+  width: 11.9%;
+  height: 49.8%;
+  pointer-events: auto;
 }
 
 .nursery-box__kitten-card {
   position: relative;
-  min-height: 80px;
+  min-height: 0;
   border-radius: 10px;
   display: flex;
   align-items: flex-end;
@@ -1006,12 +996,12 @@
   }
 
   .own-nurseries__nursery-box.nursery-box {
-    gap: 42px;
-    width: min(72vw, 860px);
+    width: 100%;
+    height: 100%;
   }
 
   .nursery-box__old-cat-card {
-    min-height: 104px;
+    min-height: 0;
   }
 
   .nursery-box__old-cat-card .cat--nursery .cat__image {
@@ -1020,7 +1010,6 @@
   }
 
   .breed-btn.nursery-box__cats-action {
-    height: 52px;
     font-size: 30px;
   }
 
@@ -1100,18 +1089,17 @@
   }
 
   .own-nurseries__nursery-box.nursery-box {
-    gap: 26px;
-    width: min(74vw, 680px);
+    width: 100%;
+    height: 100%;
   }
 
   .breed-btn.nursery-box__cats-action {
     font-size: 18px;
-    height: 34px;
     border-radius: 8px;
   }
 
   .nursery-box__old-cat-card {
-    min-height: 72px;
+    min-height: 0;
   }
 
   .nursery-box__old-cat-card .cat--nursery .cat__image {
